@@ -1,0 +1,23 @@
+# Intentionally-vulnerable practice targets for z3r0scan.
+#
+# These apps are DESIGNED to be attacked — safe and legal to scan on your own
+# machine. Never expose them to the internet.
+#
+#   cd lab && docker compose up -d
+#   z3r0scan http://localhost:8080 -y --modules web_probe,vuln_scan   # DVWA
+#   z3r0scan http://localhost:3000 -y --modules web_probe,vuln_scan   # Juice Shop
+#   docker compose down
+services:
+  dvwa:
+    image: vulnerables/web-dvwa
+    container_name: z3r0scan-dvwa
+    ports:
+      - "127.0.0.1:8080:80"   # bound to localhost only
+    restart: unless-stopped
+
+  juice-shop:
+    image: bkimminich/juice-shop
+    container_name: z3r0scan-juiceshop
+    ports:
+      - "127.0.0.1:3000:3000" # bound to localhost only
+    restart: unless-stopped

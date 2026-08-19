@@ -1,8 +1,11 @@
 """Passive subdomain enumeration.
 
-Uses subfinder when available. Otherwise queries crt.sh (Certificate
-Transparency logs) over HTTPS — free, no API key, fully passive.
-Skips cleanly when the target is a bare IP.
+Queries multiple passive sources and merges the results, so a single slow or
+empty source never zeroes out the run:
+  * subfinder (if installed) — many sources, optionally API-key powered
+  * crt.sh    — Certificate Transparency logs, free, no key
+
+If subfinder times out or returns nothing, crt.sh results are still reported.
 """
 
 from __future__ import annotations
@@ -18,10 +21,14 @@ try:
 except ImportError:  # pragma: no cover
     requests = None
 
+# Cap how many individual subdomains we list as findings (the total is always
+# reported in the detail line regardless).
+MAX_LISTED = 150
+
 
 class SubdomainModule(ScanModule):
     name = "subdomains"
-    description = "Passive subdomain enumeration (subfinder / crt.sh)"
+    description = "Passive subdomain enumeration (subfinder + crt.sh, merged)"
     optional_tools = ("subfinder",)
 
     def run(self, target: str) -> ModuleResult:
@@ -30,33 +37,54 @@ class SubdomainModule(ScanModule):
         if is_ip(host):
             return self._finish(result, "skipped", "target is an IP; no subdomains to enumerate")
 
-        subs: set[str] = set()
-        source = ""
+        found: dict[str, set[str]] = {}  # subdomain -> set of sources
+        used_sources: list[str] = []
+
         if have_tool("subfinder"):
             subs = self._subfinder(host)
-            source = "subfinder"
-        elif requests is not None:
+            if subs:
+                used_sources.append(f"subfinder({len(subs)})")
+            for s in subs:
+                found.setdefault(s, set()).add("subfinder")
+
+        if requests is not None:
             subs = self._crtsh(host)
-            source = "crt.sh"
-        else:
+            if subs:
+                used_sources.append(f"crt.sh({len(subs)})")
+            for s in subs:
+                found.setdefault(s, set()).add("crt.sh")
+
+        if not have_tool("subfinder") and requests is None:
             return self._finish(result, "skipped", "no subfinder and requests not installed")
 
-        for sub in sorted(subs):
+        for sub in sorted(found)[:MAX_LISTED]:
+            sources = ", ".join(sorted(found[sub]))
             result.add(
                 Finding(
                     title=sub,
                     severity=Severity.INFO,
-                    description=f"Subdomain discovered via {source}",
-                    evidence={"host": sub, "source": source},
+                    description=f"Subdomain discovered via {sources}",
+                    evidence={"host": sub, "sources": sorted(found[sub]), "kind": "subdomain"},
                 )
             )
-        return self._finish(result, "ok", f"{len(subs)} subdomains via {source}")
+
+        total = len(found)
+        detail = f"{total} unique subdomains"
+        if used_sources:
+            detail += " via " + " + ".join(used_sources)
+        if total > MAX_LISTED:
+            detail += f" (listing first {MAX_LISTED})"
+        if total == 0:
+            detail = "no subdomains found (sources returned nothing or timed out)"
+        return self._finish(result, "ok", detail)
 
     def _subfinder(self, host: str) -> set[str]:
-        code, out, _ = run(["subfinder", "-silent", "-d", host], timeout=180)
-        if code != 0:
+        # Generous timeout — large domains have many sources; on timeout we
+        # still return whatever crt.sh gives us.
+        code, out, _ = run(["subfinder", "-silent", "-all", "-d", host], timeout=300)
+        if code != 0 and not out:
             return set()
-        return {line.strip() for line in out.splitlines() if line.strip()}
+        return {line.strip().lower() for line in out.splitlines() if line.strip()}
 
     def _crtsh(self, host: str) -> set[str]:
         found: set[str] = set()
@@ -64,7 +92,7 @@ class SubdomainModule(ScanModule):
             resp = requests.get(
                 "https://crt.sh/",
                 params={"q": f"%.{host}", "output": "json"},
-                timeout=self.config.timeout + 10,
+                timeout=self.config.timeout + 20,
                 headers={"User-Agent": "z3r0scan"},
             )
             if resp.status_code != 200:
