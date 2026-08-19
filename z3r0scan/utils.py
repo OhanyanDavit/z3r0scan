@@ -14,15 +14,17 @@ def have_tool(name: str) -> bool:
     return shutil.which(name) is not None
 
 
-def run(cmd: list[str], timeout: float = 120.0) -> tuple[int, str, str]:
+def run(cmd: list[str], timeout: float = 120.0, input_text: str | None = None) -> tuple[int, str, str]:
     """Run a command, capturing output. Never raises on non-zero exit.
 
-    Returns (returncode, stdout, stderr). A missing binary or timeout is
-    reported as returncode -1 with the reason in stderr.
+    Optionally feeds ``input_text`` to the process's stdin. Returns
+    (returncode, stdout, stderr). A missing binary or timeout is reported as
+    returncode -1 with the reason in stderr.
     """
     try:
         proc = subprocess.run(
             cmd,
+            input=input_text,
             capture_output=True,
             text=True,
             timeout=timeout,

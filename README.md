@@ -30,7 +30,7 @@ Real recon means juggling a dozen tools, remembering each one's flags, and stitc
 - **False-positive controls** — severity is only escalated for **confirmed** services; `tcpwrapped`/guessed ports are downgraded and tagged, and **CDN/WAF fronting (Cloudflare, Fastly, Akamai…) is detected** so proxied ports are labelled edge artifacts instead of fake criticals
 - **Enhanced web scan** — status/title/tech, security-header analysis, TLS certificate inspection (issuer/expiry/weak protocols), sensitive-path checks (`/.git/config`, `/.env`, …), WAF/bot-challenge detection, and honors explicit scheme/port (`http://host:8080`) so local labs work
 - **Deep vuln scanning** — nuclei with thousands of community templates, severity filtering, rate limiting, and redirect following
-- **Merged subdomain enumeration** — subfinder **and** crt.sh combined and de-duplicated, so a slow/empty source never zeroes out the run
+- **Subdomain recon pipeline** — enumerate (subfinder + crt.sh) → **resolve via dnsx/DNS** → report only subdomains that actually exist, with their IPs. Turns tens of thousands of dead cert names into a short, real attack surface
 - **Built-in practice lab** — `lab/docker-compose.yml` spins up DVWA + OWASP Juice Shop locally so you always have a legal target to scan
 - **"Just give it an API key"** — set `SHODAN_API_KEY` and it pulls Shodan's view of the host with zero packets sent to the target
 - **Reports in JSON / Markdown / HTML** — pipeline-friendly JSON by default, a polished dark-theme HTML report on request

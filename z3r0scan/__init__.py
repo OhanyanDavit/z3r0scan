@@ -1,4 +1,4 @@
 """z3r0scan — a modular security reconnaissance and scanning orchestrator."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "Davit Ohanyan (z3r0_r3t)"
