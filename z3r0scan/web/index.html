@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>z3r0scan dashboard</title>
+<style>
+  :root{color-scheme:dark;
+    --crit:#d32f2f;--high:#f57c00;--med:#fbc02d;--low:#388e3c;--info:#607d8b;
+    --bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#c9d1d9;--muted:#8b949e;--accent:#58a6ff;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);color:var(--fg);}
+  header{padding:1.2rem 2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+  h1{margin:0;color:var(--accent);font-size:1.3rem;letter-spacing:1px}
+  .tag{color:var(--muted);font-size:.8rem}
+  .wrap{max-width:1100px;margin:0 auto;padding:1.5rem 2rem}
+  form{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem}
+  input[type=text]{flex:1;min-width:260px;background:#010409;border:1px solid var(--border);color:var(--fg);
+    padding:.7rem .9rem;border-radius:8px;font-family:inherit;font-size:1rem}
+  button{background:var(--accent);color:#04101f;border:0;padding:.7rem 1.4rem;border-radius:8px;
+    font-weight:700;cursor:pointer;font-family:inherit}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .mods{display:flex;gap:.8rem;flex-wrap:wrap;margin-bottom:1rem;font-size:.85rem;color:var(--muted)}
+  .mods label{display:flex;gap:.3rem;align-items:center;cursor:pointer}
+  .chips{display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0}
+  .chip{color:#fff;padding:.3rem .8rem;border-radius:8px;font-weight:700;font-size:.85rem}
+  .status{color:var(--muted);font-size:.9rem;margin:.4rem 0 1rem;min-height:1.2em}
+  .spinner{display:inline-block;width:.8em;height:.8em;border:2px solid var(--muted);border-top-color:var(--accent);
+    border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px;margin-right:.4rem}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem}
+  .panel h2{margin:.2rem 0 .8rem;font-size:1rem;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:.5rem}
+  .panel .detail{color:var(--muted);font-size:.8rem;font-style:italic;margin:-.4rem 0 .7rem}
+  .f{padding:.5rem 0;border-bottom:1px solid #21262d;font-size:.9rem}
+  .f:last-child{border-bottom:0}
+  .sev{display:inline-block;color:#fff;padding:.05rem .45rem;border-radius:5px;font-size:.72rem;font-weight:700;margin-right:.5rem}
+  .desc{color:var(--muted);font-size:.8rem;margin:.25rem 0 0 2.9rem}
+  .banner{background:#3d1d00;border:1px solid var(--high);color:#ffcc99;padding:.7rem 1rem;border-radius:8px;margin:1rem 0;font-size:.9rem}
+  .none{color:var(--muted);font-size:.85rem}
+  footer{color:var(--muted);font-size:.78rem;text-align:center;padding:2rem}
+  .sev-critical{background:var(--crit)}.sev-high{background:var(--high)}
+  .sev-medium{background:var(--med);color:#000}.sev-low{background:var(--low)}.sev-info{background:var(--info)}
+  .chip-critical{background:var(--crit)}.chip-high{background:var(--high)}
+  .chip-medium{background:var(--med);color:#000}.chip-low{background:var(--low)}.chip-info{background:var(--info)}
+</style>
+</head>
+<body>
+<header>
+  <h1>z3r0scan</h1>
+  <span class="tag">modular recon &amp; scan orchestrator · authorized testing only</span>
+</header>
+
+<div class="wrap">
+  <form id="scanForm">
+    <input type="text" id="target" placeholder="target (e.g. scanme.nmap.org)" autocomplete="off" autofocus>
+    <button type="submit" id="scanBtn">Scan</button>
+  </form>
+  <div class="mods" id="mods"></div>
+
+  <div class="banner" id="cdnBanner" style="display:none"></div>
+  <div class="chips" id="chips" style="display:none"></div>
+  <div class="status" id="status"></div>
+
+  <div class="cols">
+    <div class="panel" id="hostPanel" style="display:none">
+      <h2>🖥️ Host / port scan</h2>
+      <div class="detail" id="hostDetail"></div>
+      <div id="hostFindings"></div>
+    </div>
+    <div class="panel" id="webPanel" style="display:none">
+      <h2>🌐 Web scan</h2>
+      <div class="detail" id="webDetail"></div>
+      <div id="webFindings"></div>
+    </div>
+  </div>
+
+  <div id="otherPanels"></div>
+</div>
+
+<footer>z3r0scan — for authorized security testing only. Runs locally on 127.0.0.1.</footer>
+
+<script>
+const SEV_ORDER = ["critical","high","medium","low","info"];
+let poll = null;
+
+async function loadModules(){
+  const mods = await (await fetch("/api/modules")).json();
+  const box = document.getElementById("mods");
+  box.innerHTML = mods.map(m =>
+    `<label title="${m.description}"><input type="checkbox" value="${m.name}" checked> ${m.name}</label>`
+  ).join("");
+}
+
+function selectedModules(){
+  return [...document.querySelectorAll("#mods input:checked")].map(i => i.value);
+}
+
+function esc(s){return (s??"").toString().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+function findingHTML(f){
+  const sev = f.severity;
+  return `<div class="f"><span class="sev sev-${sev}">${sev.toUpperCase()}</span>${esc(f.title)}`
+       + (f.description ? `<div class="desc">${esc(f.description)}</div>` : "") + `</div>`;
+}
+
+function render(data){
+  // severity chips
+  const chips = document.getElementById("chips");
+  chips.style.display = "flex";
+  chips.innerHTML = SEV_ORDER.map(s =>
+    `<span class="chip chip-${s}">${s}: ${data.severity_counts[s]}</span>`).join("");
+
+  // status line
+  const st = document.getElementById("status");
+  if(!data.done){
+    st.innerHTML = `<span class="spinner"></span>scanning${data.current_module?` — ${esc(data.current_module)}`:""} · ${data.duration}s`;
+  } else {
+    st.textContent = `✅ done in ${data.duration}s · top severity: ${data.top_severity.toUpperCase()}`;
+  }
+
+  const byName = {};
+  data.modules.forEach(m => byName[m.module] = m);
+
+  // CDN banner (pull from host_scan evidence)
+  const banner = document.getElementById("cdnBanner");
+  const host = byName["host_scan"];
+  const cdnF = host && host.findings.find(f => f.evidence && f.evidence.cdn);
+  if(cdnF){ banner.style.display="block"; banner.textContent = "⚠ " + cdnF.description; }
+  else banner.style.display="none";
+
+  // host panel
+  if(host){
+    document.getElementById("hostPanel").style.display="block";
+    document.getElementById("hostDetail").textContent = host.detail || "";
+    const fs = host.findings.filter(f => !(f.evidence && f.evidence.cdn));
+    document.getElementById("hostFindings").innerHTML =
+      fs.length ? fs.map(findingHTML).join("") : `<div class="none">No open ports found.</div>`;
+  }
+
+  // web panel (web_probe)
+  const web = byName["web_probe"];
+  if(web){
+    document.getElementById("webPanel").style.display="block";
+    document.getElementById("webDetail").textContent = web.detail || "";
+    document.getElementById("webFindings").innerHTML =
+      web.findings.length ? web.findings.map(findingHTML).join("") : `<div class="none">No web service responded.</div>`;
+  }
+
+  // any other modules (subdomains, vuln_scan, shodan)
+  const other = data.modules.filter(m => !["host_scan","web_probe"].includes(m.module));
+  document.getElementById("otherPanels").innerHTML = other.map(m =>
+    `<div class="panel" style="margin-top:1.2rem"><h2>${esc(m.module)} <span class="tag">(${esc(m.status)})</span></h2>`
+    + (m.detail?`<div class="detail">${esc(m.detail)}</div>`:"")
+    + (m.findings.length ? m.findings.map(findingHTML).join("") : `<div class="none">No findings.</div>`)
+    + `</div>`
+  ).join("");
+}
+
+async function tick(jobId){
+  const data = await (await fetch(`/api/scan/${jobId}`)).json();
+  render(data);
+  if(data.done){
+    clearInterval(poll); poll=null;
+    document.getElementById("scanBtn").disabled=false;
+    document.getElementById("scanBtn").textContent="Scan";
+  }
+}
+
+document.getElementById("scanForm").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const target = document.getElementById("target").value.trim();
+  if(!target) return;
+  const btn = document.getElementById("scanBtn");
+  btn.disabled=true; btn.textContent="Scanning…";
+  ["cdnBanner"].forEach(id=>document.getElementById(id).style.display="none");
+  document.getElementById("otherPanels").innerHTML="";
+  const res = await fetch("/api/scan", {method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({target, modules:selectedModules()})});
+  const {job_id} = await res.json();
+  if(poll) clearInterval(poll);
+  poll = setInterval(()=>tick(job_id), 1000);
+  tick(job_id);
+});
+
+loadModules();
+</script>
+</body>
+</html>

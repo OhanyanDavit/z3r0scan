@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "z3r0scan"
-version = "0.1.0"
+version = "0.2.0"
 description = "Modular security reconnaissance and scanning orchestrator"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -26,6 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-cov", "ruff"]
+web = ["fastapi>=0.110", "uvicorn>=0.27", "pydantic>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/OhanyanDavit/z3r0scan"
@@ -33,12 +34,13 @@ Issues = "https://github.com/OhanyanDavit/z3r0scan/issues"
 
 [project.scripts]
 z3r0scan = "z3r0scan.cli:main"
+z3r0scan-web = "z3r0scan.web.app:main"
 
 [tool.setuptools.packages.find]
 include = ["z3r0scan*"]
 
 [tool.setuptools.package-data]
-z3r0scan = ["templates/*.j2"]
+z3r0scan = ["templates/*.j2", "web/*.html"]
 
 [tool.ruff]
 line-length = 110

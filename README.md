@@ -24,21 +24,36 @@ Real recon means juggling a dozen tools, remembering each one's flags, and stitc
 
 ## Features
 
+- **Web dashboard** — a local browser UI: type a target, click Scan, watch live progress, and read findings grouped into a Host-scan panel and a Web-scan panel with severity chips (`z3r0scan-web`)
 - **One command, full chain** — host scan, subdomains, web probe, vuln scan, enrichment
 - **Real tools + graceful fallback** — uses `nmap`/`nuclei`/`subfinder`/`httpx` if present; native Python otherwise
+- **False-positive controls** — severity is only escalated for **confirmed** services; `tcpwrapped`/guessed ports are downgraded and tagged, and **CDN/WAF fronting (Cloudflare, Fastly, Akamai…) is detected** so proxied ports are labelled edge artifacts instead of fake criticals
+- **Enhanced web scan** — status/title/tech, security-header analysis, TLS certificate inspection (issuer/expiry/weak protocols), and sensitive-path checks (`/.git/config`, `/.env`, …)
 - **"Just give it an API key"** — set `SHODAN_API_KEY` and it pulls Shodan's view of the host with zero packets sent to the target
-- **Severity-ranked findings** — flags risky exposures (Redis, Docker API, MongoDB, missing security headers…)
 - **Reports in JSON / Markdown / HTML** — pipeline-friendly JSON by default, a polished dark-theme HTML report on request
 - **Pluggable** — add a scanner by dropping one class in `z3r0scan/modules/`
 - **Safe by default** — authorization prompt, non-root Docker user, no destructive actions
+
+## Web dashboard
+
+```bash
+pip install -e ".[web]"     # install FastAPI + uvicorn
+z3r0scan-web                # open http://127.0.0.1:8000
+```
+
+Enter a target, choose which modules to run, and hit **Scan** — progress streams live and findings land in two panels (Host / port scan and Web scan). If the target is behind a CDN, a warning banner explains why the port results reflect the edge and not the origin.
 
 ## Install
 
 ```bash
 git clone https://github.com/OhanyanDavit/z3r0scan.git
 cd z3r0scan
-pip install -e .
+python3 -m venv .venv && source .venv/bin/activate   # recommended (esp. on macOS)
+python -m pip install -e .          # add ".[web]" for the dashboard
 ```
+
+> On macOS `pip` alone is often not on PATH — use `python3 -m pip …`, and once
+> the venv is activated you can use plain `pip`/`python`/`z3r0scan`.
 
 Or run fully self-contained with the bundled tools:
 
