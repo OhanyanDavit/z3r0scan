@@ -43,6 +43,16 @@ SENSITIVE_PATHS = {
 }
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
+# A browser-like UA reduces trivial bot blocks. Real WAF challenges (JS/CAPTCHA)
+# still can't be solved by an HTTP client — those are reported, not bypassed.
+BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
+# Markers that a response is a WAF/bot challenge rather than the real site.
+CHALLENGE_MARKERS = ("just a moment", "attention required", "cf-chl", "cf-mitigated",
+                     "checking your browser", "captcha", "access denied")
+
 
 class WebProbeModule(ScanModule):
     name = "web_probe"
@@ -52,6 +62,9 @@ class WebProbeModule(ScanModule):
     def run(self, target: str) -> ModuleResult:
         result = self._result(target)
         host = normalize_host(target)
+
+        if requests is None and not have_tool("httpx"):
+            return self._finish(result, "skipped", "no httpx and requests not installed")
 
         live = False
         if have_tool("httpx"):
@@ -63,13 +76,27 @@ class WebProbeModule(ScanModule):
             self._tls_info(host, result)
             self._sensitive_paths(host, result)
 
-        if not live and requests is None:
-            return self._finish(result, "skipped", "no httpx and requests not installed")
-        return self._finish(result, "ok", "httpx" if have_tool("httpx") else "pure-python")
+        # Don't go silent: if nothing on the web layer responded, say why.
+        if not live:
+            result.add(
+                Finding(
+                    title="No usable HTTP response",
+                    severity=Severity.INFO,
+                    description=(
+                        "No web service returned content. The target may not serve HTTP, "
+                        "or a WAF/CDN is blocking automated scanners (common with Cloudflare "
+                        "Bot Management). Try a browser to confirm, or test the origin directly."
+                    ),
+                    evidence={"kind": "live", "responded": False},
+                )
+            )
+        tool = "httpx" if have_tool("httpx") else "pure-python"
+        return self._finish(result, "ok", tool if live else f"{tool} — no HTTP response (possible WAF block)")
 
     def _httpx(self, host: str, result: ModuleResult) -> bool:
         code, out, _ = run(
-            ["httpx", "-silent", "-json", "-title", "-status-code", "-tech-detect", "-u", host],
+            ["httpx", "-silent", "-json", "-title", "-status-code", "-tech-detect",
+             "-follow-redirects", "-H", f"User-Agent: {BROWSER_UA}", "-u", host],
             timeout=120,
         )
         if code != 0:
@@ -100,8 +127,8 @@ class WebProbeModule(ScanModule):
             url = f"{scheme}://{host}"
             try:
                 resp = requests.get(
-                    url, timeout=self.config.timeout + 5, allow_redirects=True,
-                    headers={"User-Agent": "z3r0scan"}, verify=False,
+                    url, timeout=self.config.timeout + 7, allow_redirects=True,
+                    headers={"User-Agent": BROWSER_UA}, verify=False,
                 )
             except requests.RequestException:
                 continue
@@ -109,15 +136,34 @@ class WebProbeModule(ScanModule):
             title_m = TITLE_RE.search(resp.text or "")
             title = title_m.group(1).strip()[:120] if title_m else ""
             server = resp.headers.get("Server", "")
-            result.add(
-                Finding(
-                    title=f"{url} [{resp.status_code}] {title}".strip(),
-                    severity=Severity.INFO,
-                    description=f"Live web service. Server: {server}" if server else "Live web service.",
-                    evidence={"url": resp.url, "status": resp.status_code, "title": title,
-                              "server": server, "kind": "live"},
-                )
+            body = (resp.text or "").lower()
+            challenged = resp.status_code in (403, 429, 503) and any(
+                m in body or m in str(resp.headers).lower() for m in CHALLENGE_MARKERS
             )
+            if challenged:
+                result.add(
+                    Finding(
+                        title=f"{url} [{resp.status_code}] WAF/bot challenge",
+                        severity=Severity.INFO,
+                        description=(
+                            f"A web server is present but a WAF is challenging scanners "
+                            f"(Server: {server or 'unknown'}). Real content is gated behind a "
+                            "JS/CAPTCHA challenge that HTTP clients can't solve."
+                        ),
+                        evidence={"url": resp.url, "status": resp.status_code, "server": server,
+                                  "waf_challenge": True, "kind": "live"},
+                    )
+                )
+            else:
+                result.add(
+                    Finding(
+                        title=f"{url} [{resp.status_code}] {title}".strip(),
+                        severity=Severity.INFO,
+                        description=f"Live web service. Server: {server}" if server else "Live web service.",
+                        evidence={"url": resp.url, "status": resp.status_code, "title": title,
+                                  "server": server, "kind": "live"},
+                    )
+                )
             if scheme == "https":
                 lower = {k.lower(): v for k, v in resp.headers.items()}
                 for header, note in SECURITY_HEADERS.items():
@@ -193,7 +239,7 @@ class WebProbeModule(ScanModule):
             try:
                 resp = requests.get(
                     base + path, timeout=self.config.timeout + 2, allow_redirects=False,
-                    headers={"User-Agent": "z3r0scan"}, verify=False,
+                    headers={"User-Agent": BROWSER_UA}, verify=False,
                 )
             except requests.RequestException:
                 continue
