@@ -8,13 +8,15 @@ depending on any particular UI library.
 from __future__ import annotations
 
 import time
-from typing import Callable
+from typing import Callable, Optional
 
 from .config import Config
 from .models import ModuleResult, ScanReport
 from .modules import REGISTRY
 
-ProgressCallback = Callable[[str, ModuleResult | None], None]
+# Runtime type alias (evaluated eagerly, so `from __future__` doesn't apply):
+# use typing.Optional for Python 3.9 compatibility.
+ProgressCallback = Callable[[str, Optional[ModuleResult]], None]
 
 
 class Orchestrator:
