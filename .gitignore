@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.log
+
+# Scan output artifacts
+*.report.html
+*.report.json
+*.report.md
+report.html
+report.json
+report.md
+
+# Local config with API keys
+.z3r0scan.yml
+.env

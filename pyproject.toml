@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "z3r0scan"
+version = "0.1.0"
+description = "Modular security reconnaissance and scanning orchestrator"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Davit Ohanyan" }]
+keywords = ["security", "pentesting", "recon", "nmap", "nuclei", "scanner"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "Topic :: Security",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "requests>=2.28",
+    "rich>=13.0",
+    "jinja2>=3.1",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov", "ruff"]
+
+[project.urls]
+Homepage = "https://github.com/OhanyanDavit/z3r0scan"
+Issues = "https://github.com/OhanyanDavit/z3r0scan/issues"
+
+[project.scripts]
+z3r0scan = "z3r0scan.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["z3r0scan*"]
+
+[tool.setuptools.package-data]
+z3r0scan = ["templates/*.j2"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
