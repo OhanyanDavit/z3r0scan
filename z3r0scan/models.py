@@ -82,6 +82,9 @@ class ScanReport:
     modules: list[ModuleResult] = field(default_factory=list)
     started_at: float = field(default_factory=time.time)
     ended_at: float | None = None
+    # Optional AI triage of the findings (see z3r0scan.ai). Stored as a plain
+    # dict so models.py stays free of any AI-layer import.
+    ai: dict[str, Any] | None = None
 
     @property
     def all_findings(self) -> list[Finding]:
@@ -109,4 +112,5 @@ class ScanReport:
             "severity_counts": self.severity_counts(),
             "top_severity": self.top_severity.value,
             "modules": [m.to_dict() for m in self.modules],
+            "ai": self.ai,
         }

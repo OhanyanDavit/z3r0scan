@@ -42,6 +42,12 @@ class Config:
     )
     # API tokens for enrichment modules.
     shodan_api_key: str | None = None
+    # AI analysis: bring-your-own LLM key for finding triage.
+    ai_enabled: bool = False
+    ai_provider: str = "auto"  # "auto" | "anthropic" | "openai"
+    ai_model: str | None = None  # None -> provider default
+    anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
     # Safety: require explicit acknowledgement before active scanning.
     authorized: bool = False
 
@@ -59,6 +65,10 @@ class Config:
         # 2. Environment
         env_map = {
             "shodan_api_key": os.getenv("SHODAN_API_KEY") or os.getenv("Z3R0SCAN_SHODAN_KEY"),
+            "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY") or os.getenv("Z3R0SCAN_ANTHROPIC_KEY"),
+            "openai_api_key": os.getenv("OPENAI_API_KEY") or os.getenv("Z3R0SCAN_OPENAI_KEY"),
+            "ai_provider": os.getenv("Z3R0SCAN_AI_PROVIDER"),
+            "ai_model": os.getenv("Z3R0SCAN_AI_MODEL"),
             "threads": os.getenv("Z3R0SCAN_THREADS"),
             "timeout": os.getenv("Z3R0SCAN_TIMEOUT"),
         }

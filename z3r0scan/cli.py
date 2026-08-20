@@ -39,6 +39,9 @@ def _build_config(args) -> Config:
         threads=args.threads,
         timeout=args.timeout,
         authorized=args.yes,
+        ai_enabled=args.ai or None,
+        ai_provider=args.ai_provider,
+        ai_model=args.ai_model,
     )
 
 
@@ -100,6 +103,21 @@ def _run(args) -> int:
         for sev in ["critical", "high", "medium", "low", "info"]:
             out(f"  {sev.upper():<9} {counts[sev]}")
 
+    # AI analysis (if it ran)
+    ai = report.ai
+    if ai:
+        if ai.get("status") == "ok" and ai.get("summary"):
+            header = f"AI analysis — {ai.get('provider')} · {ai.get('model')}"
+            if rich:
+                from rich.markdown import Markdown
+                from rich.panel import Panel
+                console.print(Panel(Markdown(ai["summary"]), title=header, border_style="cyan"))
+            else:
+                out(f"\n=== {header} ===")
+                out(ai["summary"])
+        elif ai.get("status") != "skipped":
+            out(f"[yellow][ai] {ai.get('detail')}[/yellow]" if rich else f"[ai] {ai.get('detail')}")
+
     # Output files
     if args.json:
         Path(args.json).write_text(to_json(report), encoding="utf-8")
@@ -141,6 +159,11 @@ def build_parser():
     p.add_argument("--md", help="write Markdown report to this path")
     p.add_argument("--html", help="write HTML report to this path")
     p.add_argument("-y", "--yes", action="store_true", help="skip the authorization prompt")
+    p.add_argument("--ai", action="store_true",
+                   help="run AI triage of findings (needs ANTHROPIC_API_KEY or OPENAI_API_KEY)")
+    p.add_argument("--ai-provider", choices=["auto", "anthropic", "openai"],
+                   help="which LLM backend to use for --ai (default: auto)")
+    p.add_argument("--ai-model", help="override the AI model (e.g. claude-opus-5, gpt-4o)")
     p.add_argument("--list-modules", action="store_true", help="list available modules and exit")
     p.add_argument("--version", action="version", version=f"z3r0scan {__version__}")
     return p

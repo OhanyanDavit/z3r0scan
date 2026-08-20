@@ -24,7 +24,8 @@ Real recon means juggling a dozen tools, remembering each one's flags, and stitc
 
 ## Features
 
-- **Web dashboard** — a local browser UI: type a target, click Scan, watch live progress, and read findings grouped into a Host-scan panel and a Web-scan panel with severity chips (`z3r0scan-web`)
+- **AI finding triage (bring your own key)** — after a scan, send the findings to **Claude (Anthropic)** or **GPT (OpenAI)** for an instant, prioritized analysis: executive summary, ranked findings with confidence, likely false positives, and concrete next steps. Enter your API token in the dashboard's settings panel or via `--ai` on the CLI. No key configured? The tool works exactly as before — AI is purely additive.
+- **Web dashboard (redesigned)** — a polished local browser UI: type a target, click Scan, watch live progress, and read findings in Host-scan / Web-scan panels with severity stat tiles. A **⚙️ Settings panel** holds your Claude / OpenAI / Shodan tokens (kept in your browser, sent only to your local instance), a provider/model picker, a light/dark theme toggle, and a one-click **Test key** button (`z3r0scan-web`).
 - **One command, full chain** — host scan, subdomains, web probe, vuln scan, enrichment
 - **Real tools + graceful fallback** — uses `nmap`/`nuclei`/`subfinder`/`httpx` if present; native Python otherwise
 - **False-positive controls** — severity is only escalated for **confirmed** services; `tcpwrapped`/guessed ports are downgraded and tagged, and **CDN/WAF fronting (Cloudflare, Fastly, Akamai…) is detected** so proxied ports are labelled edge artifacts instead of fake criticals
@@ -40,11 +41,35 @@ Real recon means juggling a dozen tools, remembering each one's flags, and stitc
 ## Web dashboard
 
 ```bash
-pip install -e ".[web]"     # install FastAPI + uvicorn
+pip install -e ".[all]"     # FastAPI + uvicorn + AI SDKs (or ".[web]" for no AI)
 z3r0scan-web                # open http://127.0.0.1:8000
 ```
 
 Enter a target, choose which modules to run, and hit **Scan** — progress streams live and findings land in two panels (Host / port scan and Web scan). If the target is behind a CDN, a warning banner explains why the port results reflect the edge and not the origin.
+
+Open **⚙️ Settings** to paste your API tokens (Claude, OpenAI, Shodan), pick an AI provider/model, and toggle AI analysis. Keys are stored in your browser's `localStorage` and sent only to your local `127.0.0.1` instance — never persisted server-side or to disk. Flip on the **🤖 AI analysis** pill and every scan ends with an AI-written triage panel.
+
+## AI analysis — bring your own key
+
+z3r0scan can hand the raw scan output to an LLM and get back a hunter-grade triage. It supports two providers out of the box:
+
+| Provider | SDK | Default model | Token source |
+|---|---|---|---|
+| Claude | `anthropic` | `claude-opus-5` | `ANTHROPIC_API_KEY` env, settings panel, or `~/.z3r0scan.yml` |
+| GPT | `openai` | `gpt-4o` | `OPENAI_API_KEY` env, settings panel, or `~/.z3r0scan.yml` |
+
+```bash
+pip install -e ".[ai]"                       # install the LLM SDKs
+
+# CLI — AI triage appended to the run (provider auto-selected from your keys)
+export ANTHROPIC_API_KEY=sk-ant-...
+z3r0scan example.com -y --ai --html report.html
+
+# Force a provider / model
+z3r0scan example.com -y --ai --ai-provider openai --ai-model gpt-4o
+```
+
+The AI step is defensive-analysis only, runs **after** scanning, and never changes what traffic is sent to the target. If the SDK or key is missing it degrades to a `skipped` note instead of failing the scan. The analysis is included in the JSON, Markdown, and HTML reports.
 
 ## Install
 
@@ -80,6 +105,9 @@ z3r0scan 1.2.3.4 --modules shodan -y
 
 # Custom port set for the host scan
 z3r0scan target.local --ports 22,80,443,8080 --html out.html -y
+
+# Scan + AI triage of the findings (needs an Anthropic or OpenAI key)
+z3r0scan example.com -y --ai --html report.html
 
 # List available modules
 z3r0scan --list-modules
@@ -123,6 +151,11 @@ host_scan     subdomains        web_probe    vuln_scan       shodan
  socket)       crt.sh)           requests)                    passive)
                    │
                    ▼
+            ┌──────────────┐     ┌──────────────────────┐
+            │  AI analysis │ ◀── │ findings (all modules)│
+            │ (Claude/GPT) │     └──────────────────────┘
+            └──────┬───────┘     (optional — needs a key)
+                   ▼
             ┌──────────────┐
             │   Reporter   │ ──▶ JSON · Markdown · HTML
             └──────────────┘
@@ -140,7 +173,16 @@ threads: 100
 timeout: 2.5
 modules: [host_scan, subdomains, web_probe, vuln_scan, shodan]
 shodan_api_key: "your-key-here"   # or use the SHODAN_API_KEY env var
+
+# AI triage (optional) — bring your own key
+ai_enabled: true
+ai_provider: auto                 # auto | anthropic | openai
+ai_model: claude-opus-5           # optional; omit to use the provider default
+anthropic_api_key: "sk-ant-..."   # or the ANTHROPIC_API_KEY env var
+openai_api_key: "sk-..."          # or the OPENAI_API_KEY env var
 ```
+
+Precedence for AI keys, like everything else: **CLI flags → environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) → `~/.z3r0scan.yml` → defaults.** In the web dashboard, keys entered in the settings panel are sent per-scan and take priority for that run.
 
 ## Extending it
 
@@ -175,10 +217,12 @@ Tests are fully offline (network calls are monkeypatched), so CI is deterministi
 
 ## Roadmap
 
+- [x] Optional FastAPI server + web dashboard
+- [x] AI finding triage (Claude / GPT, bring your own key)
 - [ ] Async orchestration for concurrent module execution
 - [ ] More enrichment sources (Censys, VirusTotal, SecurityTrails)
 - [ ] Diff mode — compare two scans and alert on new exposures
-- [ ] Optional FastAPI server + web dashboard
+- [ ] More AI providers (local models via Ollama, Azure OpenAI)
 
 ## License
 

@@ -21,6 +21,12 @@
   .desc { color:#8b949e; font-size:.9rem; margin:.25rem 0 .3rem 3.4rem; }
   .detail { color:#8b949e; font-style:italic; }
   .none { color:#8b949e; }
+  .ai { background:#161b22; border:1px solid #30363d; border-left:3px solid #58a6ff;
+        border-radius:8px; padding:.6rem 1.1rem; margin:.5rem 0; }
+  .ai h4, .ai h5, .ai h6 { color:#58a6ff; margin:.9rem 0 .3rem; border:0; }
+  .ai ul { list-style:disc; padding-left:1.3rem; }
+  .ai li { border:0; padding:.15rem 0; }
+  .ai code { background:#0d1117; padding:.1rem .3rem; border-radius:4px; }
   footer { margin-top:3rem; color:#8b949e; font-size:.85rem; }
 </style>
 </head>
@@ -36,6 +42,11 @@
       <span class="chip" style="background:{{ colors[sev] }}">{{ sev }}: {{ d.severity_counts[sev] }}</span>
     {% endfor %}
   </div>
+
+  {% if ai_html %}
+    <h2>🤖 AI analysis <small>(via {{ ai.provider }} · {{ ai.model }})</small></h2>
+    <div class="ai">{{ ai_html|safe }}</div>
+  {% endif %}
 
   {% for module in report.modules %}
     <h2>{{ module.module }} <small>(status: {{ module.status }})</small></h2>

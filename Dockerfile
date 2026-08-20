@@ -13,7 +13,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-RUN pip install --no-cache-dir .
+# Install with the web dashboard + AI analysis extras so the container is
+# full-featured out of the box (bring your own API key at runtime).
+RUN pip install --no-cache-dir ".[all]"
 
 # Drop root; scanning does not need it for connect scans.
 RUN useradd --create-home scanner
