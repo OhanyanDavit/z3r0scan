@@ -27,6 +27,21 @@ class Severity(str, Enum):
         return order.index(self)
 
 
+class Confidence(str, Enum):
+    """How strongly a finding is evidenced.
+
+    A ``VERIFIED`` finding was confirmed by a protocol-specific check; a ``LOW``
+    finding is a raw observation (e.g. a TCP port accepted a connection) that a
+    human should still confirm. Severity says *how bad if true*; confidence says
+    *how sure we are it's true* — the two must not be conflated.
+    """
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    VERIFIED = "verified"
+
+
 @dataclass
 class Finding:
     """A single observation: an open port, a live host, a vulnerability, etc."""
@@ -36,10 +51,14 @@ class Finding:
     description: str = ""
     # Free-form structured evidence (port number, URL, CVE id, banner, ...).
     evidence: dict[str, Any] = field(default_factory=dict)
+    # How strongly the finding is evidenced (kept after evidence so positional
+    # ``Finding(title, sev, desc, evidence)`` construction stays valid).
+    confidence: Confidence = Confidence.MEDIUM
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["severity"] = self.severity.value
+        d["confidence"] = self.confidence.value
         return d
 
 
@@ -97,20 +116,26 @@ class ScanReport:
         return counts
 
     @property
-    def top_severity(self) -> Severity:
+    def top_severity(self) -> Severity | None:
+        """Highest severity across all findings, or None when there are none.
+
+        None (rendered as ``"none"``) is deliberately distinct from ``info`` —
+        an empty scan is not the same as a scan that found info-level items.
+        """
         findings = self.all_findings
         if not findings:
-            return Severity.INFO
+            return None
         return max((f.severity for f in findings), key=lambda s: s.rank)
 
     def to_dict(self) -> dict[str, Any]:
+        top = self.top_severity
         return {
             "target": self.target,
             "started_at": self.started_at,
             "ended_at": self.ended_at,
             "duration": round((self.ended_at or time.time()) - self.started_at, 2),
             "severity_counts": self.severity_counts(),
-            "top_severity": self.top_severity.value,
+            "top_severity": top.value if top else "none",
             "modules": [m.to_dict() for m in self.modules],
             "ai": self.ai,
         }

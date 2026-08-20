@@ -20,8 +20,11 @@ def test_report_severity_counts_and_top():
     assert report.top_severity == Severity.CRITICAL
 
 
-def test_empty_report_top_severity_is_info():
-    assert ScanReport(target="x").top_severity == Severity.INFO
+def test_empty_report_top_severity_is_none():
+    # An empty scan is distinct from a scan that found info-level items.
+    report = ScanReport(target="x")
+    assert report.top_severity is None
+    assert report.to_dict()["top_severity"] == "none"
 
 
 def test_finding_serialization():

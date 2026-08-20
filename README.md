@@ -83,11 +83,14 @@ python -m pip install -e .          # add ".[web]" for the dashboard
 > On macOS `pip` alone is often not on PATH — use `python3 -m pip …`, and once
 > the venv is activated you can use plain `pip`/`python`/`z3r0scan`.
 
-Or run fully self-contained with the bundled tools:
+Or run it in Docker (bundles nmap; other modules use the pure-Python fallback):
 
 ```bash
 docker build -t z3r0scan .
-docker run --rm z3r0scan scan example.com -y --md /dev/stdout
+# target is the first argument — there is no "scan" subcommand
+docker run --rm z3r0scan example.com -y --md /dev/stdout
+# mount a volume to keep report files (the container writes to /reports)
+docker run --rm -v "$PWD/reports:/reports" z3r0scan example.com -y --html /reports/out.html
 ```
 
 ## Usage
@@ -109,9 +112,25 @@ z3r0scan target.local --ports 22,80,443,8080 --html out.html -y
 # Scan + AI triage of the findings (needs an Anthropic or OpenAI key)
 z3r0scan example.com -y --ai --html report.html
 
+# Gate CI on severity, and consume the JSON directly (stdout is pure JSON)
+z3r0scan example.com -y --fail-on medium | jq '.severity_counts'
+
 # List available modules
 z3r0scan --list-modules
 ```
+
+### Pipeline output & exit codes
+
+In the default mode (no `--json`/`--md`/`--html`), **stdout is a single JSON document** and all human-facing output (banner, progress, severity table) goes to stderr — so `z3r0scan host | jq` just works. Exit codes are machine-readable:
+
+| Code | Meaning |
+|---|---|
+| `0` | Completed; no finding reached the `--fail-on` severity (default `high`) |
+| `2` | A finding reached the `--fail-on` threshold |
+| `3` | One or more requested modules errored (a failed scan no longer exits `0`) |
+| `64` | Invalid target or arguments (empty, spaces, control chars, or a leading `-`) |
+
+Every target is validated before any packet is sent — option-like strings such as `-oX` are rejected so they can't be smuggled into a tool like nmap as a flag.
 
 ### Example output
 

@@ -17,6 +17,9 @@ from z3r0scan.utils import is_ip, normalize_host
 
 def _no_cdn(monkeypatch):
     monkeypatch.setattr(hs, "detect_cdn", lambda host, timeout=5.0: CDNResult(False, ip="1.1.1.1"))
+    # Keep offline: pretend every hostname resolves so host_scan doesn't bail
+    # out with the (correct) "could not resolve" error against a real resolver.
+    monkeypatch.setattr(hs, "resolve", lambda host: "1.2.3.4")
 
 
 def test_normalize_host():
@@ -78,6 +81,7 @@ def test_cdn_detection_adds_banner_and_downgrades(monkeypatch):
         lambda host, timeout=5.0: CDNResult(True, provider="Cloudflare", method="ip-range", ip="104.16.0.1"),
     )
     monkeypatch.setattr(hs, "have_tool", lambda name: True)
+    monkeypatch.setattr(hs, "resolve", lambda host: "104.16.0.1")
     monkeypatch.setattr(hs, "run", lambda cmd, timeout=300: (0, "6379/tcp open redis", ""))
     result = HostScanModule(Config(ports=[6379])).run("picsart.com")
     assert any(f.evidence.get("cdn") == "Cloudflare" for f in result.findings)

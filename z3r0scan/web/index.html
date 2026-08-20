@@ -355,8 +355,8 @@ async function loadModules(){
     const el = document.createElement("label");
     el.className = "toggle on";
     el.dataset.mod = m.name;
-    el.title = m.description;
-    el.innerHTML = `<span class="dot"></span> ${m.name}`;
+    el.title = m.description;           // .title is a text property — no injection
+    el.innerHTML = `<span class="dot"></span> ${esc(m.name)}`;
     el.addEventListener("click", ()=> el.classList.toggle("on"));
     row.insertBefore(el, aiToggle);
   });
@@ -413,8 +413,10 @@ function render(data){
   if(!data.done){
     const cur = data.current_module ? ` — ${esc(data.current_module)}${data.current_module==="ai_analysis"?" (thinking…)":""}` : "";
     st.innerHTML = `<span class="spinner"></span> scanning${cur} · ${data.duration}s`;
+  }else if(data.error){
+    st.textContent = `⚠ scan failed: ${data.error}`;
   }else{
-    st.innerHTML = `<span class="badge-done">✔ done in ${data.duration}s</span> · top severity: <b>${data.top_severity.toUpperCase()}</b>`;
+    st.innerHTML = `<span class="badge-done">✔ done in ${data.duration}s</span> · top severity: <b>${(data.top_severity||"none").toUpperCase()}</b>`;
   }
 
   const byName={}; data.modules.forEach(m=>byName[m.module]=m);
@@ -472,15 +474,30 @@ function render(data){
     +`</div>`).join("");
 }
 
+function stopPolling(){
+  if(poll){ clearInterval(poll); poll=null; }
+  const b=document.getElementById("scanBtn"); b.disabled=false; b.textContent="Scan";
+}
+
+function stopPolling(){
+  if(poll){ clearInterval(poll); poll=null; }
+  const b=document.getElementById("scanBtn"); b.disabled=false; b.textContent="Scan";
+}
+
 async function tick(jobId){
   try{
-    const data=await(await fetch(`/api/scan/${jobId}`)).json();
-    render(data);
-    if(data.done){
-      clearInterval(poll);poll=null;
-      const b=document.getElementById("scanBtn");b.disabled=false;b.textContent="Scan";
+    const res = await fetch(`/api/scan/${jobId}`);
+    if(!res.ok){
+      document.getElementById("status").textContent = `⚠ status ${res.status}: ${res.statusText}`;
+      if(res.status === 404) stopPolling();
+      return;
     }
-  }catch(e){/* keep polling */}
+    const data = await res.json();
+    render(data);
+    if(data.done) stopPolling();
+  }catch(e){
+    document.getElementById("status").textContent = "⚠ lost connection to the dashboard";
+  }
 }
 
 /* ---------- scan submit ---------- */
@@ -493,7 +510,6 @@ document.getElementById("scanForm").addEventListener("submit",async e=>{
   document.getElementById("cdnBanner").style.display="none";
   document.getElementById("aiPanel").style.display="none";
   document.getElementById("otherPanels").innerHTML="";
-
   const aiOn = document.getElementById("aiToggle").classList.contains("on");
   const body={
     target,
@@ -507,10 +523,23 @@ document.getElementById("scanForm").addEventListener("submit",async e=>{
       openai_api_key: s.openai_key || null,
     }
   };
-  const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-  const {job_id}=await res.json();
-  if(poll)clearInterval(poll);
-  poll=setInterval(()=>tick(job_id),1000); tick(job_id);
+  try{
+    const res = await fetch("/api/scan", {method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(body)});
+    if(!res.ok){
+      const err = await res.json().catch(()=>({detail:res.statusText}));
+      document.getElementById("status").textContent = `⚠ ${err.detail || "could not start scan"}`;
+      btn.disabled=false; btn.textContent="Scan";
+      return;
+    }
+    const {job_id} = await res.json();
+    if(poll) clearInterval(poll);
+    poll = setInterval(()=>tick(job_id), 1000);
+    tick(job_id);
+  }catch(e){
+    document.getElementById("status").textContent = "⚠ could not reach the dashboard";
+    btn.disabled=false; btn.textContent="Scan";
+  }
 });
 
 /* AI pill toggles the persisted enabled flag too */
