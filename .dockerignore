@@ -1,0 +1,27 @@
+# Keep the build context (and image) free of local secrets, caches, and cruft.
+# COPY . . does NOT honor .gitignore — without this file, a local .env or
+# .z3r0scan.yml (both documented as places for API keys) would land in the image.
+.git
+.github
+.venv
+venv
+env
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+# Local secrets / config
+.env
+*.env
+.z3r0scan.yml
+# Generated reports
+report.*
+*.report.*
+docs/sample-report.*
+# Editor / OS noise
+.DS_Store
+.idea
+.vscode

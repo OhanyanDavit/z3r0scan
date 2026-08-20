@@ -87,11 +87,21 @@ class SubdomainModule(ScanModule):
         return self._finish(result, "ok", detail)
 
     # -- enumeration -------------------------------------------------------
+    @staticmethod
+    def _in_scope(name: str, host: str) -> bool:
+        """True only if ``name`` is the apex or a real subdomain of ``host``.
+
+        A plain ``endswith(host)`` check wrongly accepts ``notexample.com`` for
+        ``example.com`` — the match must land on a label (dot) boundary.
+        """
+        return name == host or name.endswith("." + host)
+
     def _subfinder(self, host: str) -> set[str]:
         code, out, _ = run(["subfinder", "-silent", "-all", "-d", host], timeout=300)
         if code != 0 and not out:
             return set()
-        return {ln.strip().lower() for ln in out.splitlines() if ln.strip()}
+        names = (ln.strip().lower() for ln in out.splitlines() if ln.strip())
+        return {n for n in names if self._in_scope(n, host)}
 
     def _crtsh(self, host: str) -> set[str]:
         found: set[str] = set()
@@ -105,7 +115,7 @@ class SubdomainModule(ScanModule):
             for entry in json.loads(resp.text or "[]"):
                 for name in entry.get("name_value", "").splitlines():
                     name = name.strip().lstrip("*.").lower()
-                    if name.endswith(host):
+                    if self._in_scope(name, host):
                         found.add(name)
         except (requests.RequestException, ValueError):
             pass

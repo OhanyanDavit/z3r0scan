@@ -9,7 +9,9 @@ Run with:  z3r0scan-web        (then open http://127.0.0.1:8000)
 from __future__ import annotations
 
 import threading
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,7 @@ from ..config import Config
 from ..models import ScanReport
 from ..modules import REGISTRY
 from ..orchestrator import Orchestrator
+from ..utils import TargetError, validate_target
 
 try:
     from fastapi import FastAPI, HTTPException
@@ -34,6 +37,11 @@ app = FastAPI(title="z3r0scan", docs_url=None, redoc_url=None)
 # In-memory job store. Fine for a single-user local dashboard.
 _JOBS: dict[str, dict[str, Any]] = {}
 _LOCK = threading.Lock()
+# Bounded worker pool so a burst of requests can't spawn unlimited threads.
+_MAX_WORKERS = 4
+_EXECUTOR = ThreadPoolExecutor(max_workers=_MAX_WORKERS, thread_name_prefix="z3r0scan")
+_JOB_TTL = 3600.0  # seconds a finished job is retained before cleanup
+_MAX_JOBS = 200
 
 
 class ScanRequest(BaseModel):
@@ -41,47 +49,73 @@ class ScanRequest(BaseModel):
     modules: list[str] | None = None
 
 
-def _serialize(report: ScanReport, current: str | None, done: bool) -> dict[str, Any]:
-    d = report.to_dict()
-    d["current_module"] = current
-    d["done"] = done
+def _serialize(job: dict[str, Any]) -> dict[str, Any]:
+    d = job["report"].to_dict()
+    d["current_module"] = job["current"]
+    d["done"] = job["done"]
+    d["error"] = job["error"]
     return d
 
 
+def _reap_old_jobs() -> None:
+    """Drop finished jobs past their TTL so the store can't grow unbounded."""
+    now = time.monotonic()
+    stale = [
+        jid for jid, j in _JOBS.items()
+        if j["done"] and (now - j["created_at"]) > _JOB_TTL
+    ]
+    for jid in stale:
+        _JOBS.pop(jid, None)
+
+
 def _run_scan(job_id: str, target: str, modules: list[str]) -> None:
-    config = Config.load(modules=modules, authorized=True)
-    orch = Orchestrator(config)
-    report = ScanReport(target=target)
+    job = _JOBS[job_id]
+    report = job["report"]  # created synchronously in start_scan
 
     def on_progress(name: str, result) -> None:
         with _LOCK:
             if result is None:
-                _JOBS[job_id]["current"] = name
+                job["current"] = name
             else:
                 report.modules.append(result)
-                _JOBS[job_id]["report"] = report
 
-    with _LOCK:
-        _JOBS[job_id] = {"report": report, "current": None, "done": False, "target": target}
     try:
-        final = orch.scan(target, on_progress=on_progress)
+        config = Config.load(modules=modules, authorized=True)
+        final = Orchestrator(config).scan(target, on_progress=on_progress)
         with _LOCK:
-            _JOBS[job_id]["report"] = final
+            job["report"] = final
+    except Exception as exc:  # noqa: BLE001 - surface a clear error state, don't hang
+        with _LOCK:
+            job["error"] = f"{type(exc).__name__}: {exc}"
     finally:
         with _LOCK:
-            _JOBS[job_id]["done"] = True
-            _JOBS[job_id]["current"] = None
+            job["done"] = True
+            job["current"] = None
 
 
 @app.post("/api/scan")
 def start_scan(req: ScanRequest) -> dict[str, str]:
-    target = req.target.strip()
-    if not target:
-        raise HTTPException(400, "target is required")
+    try:
+        target = validate_target(req.target)
+    except TargetError as exc:
+        raise HTTPException(400, f"invalid target: {exc}") from exc
+
     modules = [m for m in (req.modules or list(REGISTRY)) if m in REGISTRY]
     job_id = uuid.uuid4().hex[:12]
-    thread = threading.Thread(target=_run_scan, args=(job_id, target, modules), daemon=True)
-    thread.start()
+    with _LOCK:
+        _reap_old_jobs()
+        if sum(1 for j in _JOBS.values() if not j["done"]) >= _MAX_JOBS:
+            raise HTTPException(429, "too many scans in progress; try again shortly")
+        # Initialize the job BEFORE submitting work, so an immediate status poll
+        # can never 404 on a job that "exists" but whose worker hasn't run yet.
+        _JOBS[job_id] = {
+            "report": ScanReport(target=target),
+            "current": None,
+            "done": False,
+            "error": None,
+            "created_at": time.monotonic(),
+        }
+    _EXECUTOR.submit(_run_scan, job_id, target, modules)
     return {"job_id": job_id}
 
 
@@ -91,7 +125,7 @@ def scan_status(job_id: str) -> dict[str, Any]:
         job = _JOBS.get(job_id)
         if not job:
             raise HTTPException(404, "unknown job")
-        return _serialize(job["report"], job["current"], job["done"])
+        return _serialize(job)
 
 
 @app.get("/api/modules")

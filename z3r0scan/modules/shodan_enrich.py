@@ -8,7 +8,7 @@ products, known CVEs) with zero packets sent to the target.
 from __future__ import annotations
 
 from ..models import Finding, ModuleResult, Severity
-from ..utils import is_ip, normalize_host, resolve
+from ..utils import is_ip, normalize_host, redact, resolve
 from .base import ScanModule
 
 try:
@@ -40,7 +40,10 @@ class ShodanModule(ScanModule):
                 timeout=self.config.timeout + 10,
             )
         except requests.RequestException as exc:
-            return self._finish(result, "error", f"shodan request failed: {exc}")
+            # A requests exception can echo the full URL — including the API key
+            # in the query string. Redact before it reaches any report/log.
+            msg = redact(str(exc), self.config.shodan_api_key)
+            return self._finish(result, "error", f"shodan request failed ({type(exc).__name__}): {msg}")
 
         if resp.status_code == 404:
             return self._finish(result, "ok", "no Shodan records for this host")

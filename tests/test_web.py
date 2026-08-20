@@ -1,3 +1,5 @@
+import pytest
+
 from z3r0scan.modules.web_probe import candidate_urls
 
 
@@ -14,3 +16,31 @@ def test_candidate_urls_host_port_guesses_scheme():
     assert candidate_urls("localhost:8080") == ["http://localhost:8080"]
     assert candidate_urls("host:443") == ["https://host:443"]
     assert candidate_urls("host:8443") == ["https://host:8443"]
+
+
+def test_dashboard_job_exists_before_worker_starts():
+    """A status poll immediately after POST must not 404 (job-init race)."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from z3r0scan.web.app import app
+
+    client = TestClient(app)
+    # shodan-only keeps the worker offline (skips without a key).
+    resp = client.post("/api/scan", json={"target": "example.com", "modules": ["shodan"]})
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+    status = client.get(f"/api/scan/{job_id}")
+    assert status.status_code == 200
+    assert status.json()["target"] == "example.com"
+
+
+def test_dashboard_rejects_invalid_target():
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from z3r0scan.web.app import app
+
+    client = TestClient(app)
+    resp = client.post("/api/scan", json={"target": "-oX"})
+    assert resp.status_code == 400

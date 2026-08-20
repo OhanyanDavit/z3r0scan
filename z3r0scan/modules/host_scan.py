@@ -18,9 +18,24 @@ import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ..cdn import detect_cdn
-from ..models import Finding, ModuleResult, Severity
-from ..utils import have_tool, normalize_host, resolve, run
+from ..models import Confidence, Finding, ModuleResult, Severity
+from ..utils import have_tool, is_ip, normalize_host, resolve, run
 from .base import ScanModule
+
+# Substrings that, if present in a TCP banner, confirm the guessed service for a
+# port. A bare TCP connect proves nothing; a banner that names the wrong service
+# (e.g. an SSH banner answering on 2375) must NOT confirm a Docker API — that is
+# exactly how a false "critical" is manufactured.
+BANNER_MARKERS: dict[int, tuple[str, ...]] = {
+    21: ("ftp",),
+    22: ("ssh",),
+    25: ("smtp", "esmtp"),
+    110: ("pop3", "+ok"),
+    143: ("imap",),
+    3306: ("mysql", "mariadb"),
+    5432: ("postgres",),
+    6379: ("redis",),
+}
 
 # Ports worth flagging as higher severity WHEN the service is confirmed.
 NOTABLE_PORTS = {
@@ -45,9 +60,11 @@ class HostScanModule(ScanModule):
     def run(self, target: str) -> ModuleResult:
         result = self._result(target)
         host = normalize_host(target)
-        ip = resolve(host)
-        if ip is None and not host:
-            return self._finish(result, "error", "could not resolve target")
+        if not host:
+            return self._finish(result, "error", "empty or invalid target")
+        # An unresolvable hostname is an error, not a clean "0 findings" result.
+        if not is_ip(host) and resolve(host) is None:
+            return self._finish(result, "error", f"could not resolve target: {host}")
 
         # Detect CDN/WAF up front so we can flag edge artifacts.
         cdn = detect_cdn(host, timeout=self.config.timeout + 2)
@@ -129,25 +146,43 @@ class HostScanModule(ScanModule):
 
     @staticmethod
     def _banner_confirms(port: int, banner: str) -> bool:
-        """A non-empty banner is weak evidence a real service is listening."""
-        return bool(banner)
+        """Confirm a service only if the banner actually names it.
+
+        An empty banner, or a banner that matches a *different* service, does not
+        confirm the port's guessed service. Ports whose real service emits no
+        useful banner (HTTP-based APIs like Docker's 2375) can never be confirmed
+        this way and stay unescalated — which is the safe default.
+        """
+        markers = BANNER_MARKERS.get(port)
+        if not markers or not banner:
+            return False
+        low = banner.lower()
+        return any(m in low for m in markers)
 
     def _record_port(
         self, result: ModuleResult, port: int, service: str, version: str, confirmed: bool
     ) -> None:
         notable = NOTABLE_PORTS.get(port)
         edge = getattr(self, "_edge", False)
+        trustworthy = confirmed and not edge
 
-        if notable and confirmed and not edge:
+        if notable and trustworthy:
             sev, note = notable
             tag = ""
+            confidence = Confidence.HIGH
         elif notable:
-            # Notable port but we can't trust it — do not escalate.
+            # Notable port but we can't trust it — report as an observation, not
+            # a vulnerability, and say what a human still needs to verify.
             sev = Severity.INFO
             note = notable[1]
-            tag = " (unconfirmed — behind CDN)" if edge else " (unconfirmed — service guessed from port)"
+            confidence = Confidence.LOW
+            tag = (
+                " (unconfirmed — behind CDN)" if edge
+                else " (unconfirmed — port open but service not verified)"
+            )
         else:
             sev, note, tag = Severity.INFO, "", ""
+            confidence = Confidence.HIGH if trustworthy else Confidence.LOW
 
         title = f"{port}/tcp open — {service or 'unknown'}{tag}"
         desc = f"Open TCP port {port} ({service or 'unknown'})"
@@ -163,11 +198,12 @@ class HostScanModule(ScanModule):
                 title=title,
                 severity=sev,
                 description=desc,
+                confidence=confidence,
                 evidence={
                     "port": port,
                     "service": service,
                     "version": version,
-                    "confirmed": confirmed and not edge,
+                    "confirmed": trustworthy,
                     "edge": edge,
                 },
             )

@@ -1,6 +1,5 @@
-import os
 
-from z3r0scan.config import Config, DEFAULT_PORTS
+from z3r0scan.config import DEFAULT_PORTS, Config
 
 
 def test_defaults():

@@ -11,9 +11,20 @@ from pathlib import Path
 
 from . import __version__
 from .config import Config
+from .models import Severity
 from .modules import REGISTRY
 from .orchestrator import Orchestrator
 from .report import to_json, to_markdown, write
+from .utils import TargetError, validate_target
+
+# Exit codes — machine-readable scan outcome (see README).
+EXIT_OK = 0            # completed; --fail-on threshold not reached
+EXIT_THRESHOLD = 2     # findings reached the --fail-on severity
+EXIT_MODULE_ERROR = 3  # one or more requested modules errored
+EXIT_ABORTED = 1       # user declined the authorization prompt
+EXIT_BAD_ARGS = 64     # invalid target / configuration
+
+_SEV_RANK = {s.value: s.rank for s in Severity}
 
 BANNER = rf"""
  ____  _____ _____  ___  ___  ___ __ _ _ __
@@ -43,17 +54,32 @@ def _build_config(args) -> Config:
 
 
 def _run(args) -> int:
+    # Default (no output file) prints JSON to stdout — keep that stream clean and
+    # send ALL human-facing output to stderr, so `z3r0scan host | jq` works.
+    json_to_stdout = not (args.json or args.md or args.html)
+
     try:
         from rich.console import Console
         from rich.table import Table
-        console = Console()
+        console = Console(stderr=json_to_stdout)
         rich = True
     except ImportError:
         console = None
         rich = False
 
     def out(msg=""):
-        console.print(msg) if rich else print(_strip(msg))
+        if rich:
+            console.print(msg)
+        else:
+            print(_strip(msg), file=sys.stderr if json_to_stdout else sys.stdout)
+
+    # Validate the target up front — reject option-like / malformed input before
+    # it ever reaches a scanner subprocess.
+    try:
+        target = validate_target(args.target)
+    except TargetError as exc:
+        out(f"[red]Invalid target:[/red] {exc}" if rich else f"Invalid target: {exc}")
+        return EXIT_BAD_ARGS
 
     out(f"[bold cyan]{BANNER}[/bold cyan]" if rich else BANNER)
 
@@ -62,16 +88,16 @@ def _run(args) -> int:
     if not config.authorized:
         out(f"[yellow]{DISCLAIMER}[/yellow]" if rich else DISCLAIMER)
         try:
-            answer = input(f"Proceed with scanning '{args.target}'? [y/N] ").strip().lower()
+            answer = input(f"Proceed with scanning '{target}'? [y/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             answer = "n"
         if answer not in ("y", "yes"):
             out("Aborted.")
-            return 1
+            return EXIT_ABORTED
 
     active = [m for m in config.modules if m in REGISTRY]
-    out(f"[dim]Target:[/dim] {args.target}   [dim]Modules:[/dim] {', '.join(active)}" if rich
-        else f"Target: {args.target}   Modules: {', '.join(active)}")
+    out(f"[dim]Target:[/dim] {target}   [dim]Modules:[/dim] {', '.join(active)}" if rich
+        else f"Target: {target}   Modules: {', '.join(active)}")
 
     orch = Orchestrator(config)
 
@@ -85,7 +111,7 @@ def _run(args) -> int:
             console.print(f"    [->] [{tag}]{result.status}[/{tag}]: {n} finding(s) "
                           f"in {result.duration:.1f}s  [dim]{result.detail}[/dim]") if rich else out(line)
 
-    report = orch.scan(args.target, on_progress=progress)
+    report = orch.scan(target, on_progress=progress)
 
     # Summary
     counts = report.severity_counts()
@@ -110,11 +136,27 @@ def _run(args) -> int:
     if args.html:
         write(report, args.html, "html")
         out(f"[green][+][/green] HTML  -> {args.html}" if rich else f"[+] HTML -> {args.html}")
-    if not (args.json or args.md or args.html):
-        # Default: print JSON to stdout so the tool is pipeline-friendly.
-        print(to_json(report))
+    if json_to_stdout:
+        # The ONLY thing written to stdout — a clean JSON document for pipelines.
+        sys.stdout.write(to_json(report) + "\n")
 
-    return 2 if report.top_severity.rank >= 3 else 0  # nonzero exit on high/critical
+    return _exit_code(report, args.fail_on)
+
+
+def _exit_code(report, fail_on: str) -> int:
+    """Map a scan report to a process exit code.
+
+    Threshold reached takes precedence (that's the signal CI usually gates on),
+    then module failures, else success. A scanner that errored out no longer
+    silently exits 0.
+    """
+    top = report.top_severity
+    threshold = _SEV_RANK.get(fail_on, _SEV_RANK["high"])
+    if top is not None and top.rank >= threshold:
+        return EXIT_THRESHOLD
+    if any(m.status == "error" for m in report.modules):
+        return EXIT_MODULE_ERROR
+    return EXIT_OK
 
 
 def _strip(msg: str) -> str:
@@ -141,6 +183,8 @@ def build_parser():
     p.add_argument("--md", help="write Markdown report to this path")
     p.add_argument("--html", help="write HTML report to this path")
     p.add_argument("-y", "--yes", action="store_true", help="skip the authorization prompt")
+    p.add_argument("--fail-on", default="high", choices=["info", "low", "medium", "high", "critical"],
+                   help="exit code 2 when a finding reaches this severity (default: high)")
     p.add_argument("--list-modules", action="store_true", help="list available modules and exit")
     p.add_argument("--version", action="version", version=f"z3r0scan {__version__}")
     return p

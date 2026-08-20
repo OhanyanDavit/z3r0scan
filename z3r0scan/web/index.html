@@ -89,7 +89,7 @@ async function loadModules(){
   const mods = await (await fetch("/api/modules")).json();
   const box = document.getElementById("mods");
   box.innerHTML = mods.map(m =>
-    `<label title="${m.description}"><input type="checkbox" value="${m.name}" checked> ${m.name}</label>`
+    `<label title="${esc(m.description)}"><input type="checkbox" value="${esc(m.name)}" checked> ${esc(m.name)}</label>`
   ).join("");
 }
 
@@ -116,8 +116,10 @@ function render(data){
   const st = document.getElementById("status");
   if(!data.done){
     st.innerHTML = `<span class="spinner"></span>scanning${data.current_module?` — ${esc(data.current_module)}`:""} · ${data.duration}s`;
+  } else if(data.error){
+    st.textContent = `⚠ scan failed: ${data.error}`;
   } else {
-    st.textContent = `✅ done in ${data.duration}s · top severity: ${data.top_severity.toUpperCase()}`;
+    st.textContent = `✅ done in ${data.duration}s · top severity: ${(data.top_severity||"none").toUpperCase()}`;
   }
 
   const byName = {};
@@ -158,13 +160,24 @@ function render(data){
   ).join("");
 }
 
+function stopPolling(){
+  if(poll){ clearInterval(poll); poll=null; }
+  const b=document.getElementById("scanBtn"); b.disabled=false; b.textContent="Scan";
+}
+
 async function tick(jobId){
-  const data = await (await fetch(`/api/scan/${jobId}`)).json();
-  render(data);
-  if(data.done){
-    clearInterval(poll); poll=null;
-    document.getElementById("scanBtn").disabled=false;
-    document.getElementById("scanBtn").textContent="Scan";
+  try{
+    const res = await fetch(`/api/scan/${jobId}`);
+    if(!res.ok){
+      document.getElementById("status").textContent = `⚠ status ${res.status}: ${res.statusText}`;
+      if(res.status === 404) stopPolling();
+      return;
+    }
+    const data = await res.json();
+    render(data);
+    if(data.done) stopPolling();
+  }catch(e){
+    document.getElementById("status").textContent = "⚠ lost connection to the dashboard";
   }
 }
 
@@ -176,12 +189,23 @@ document.getElementById("scanForm").addEventListener("submit", async (e)=>{
   btn.disabled=true; btn.textContent="Scanning…";
   ["cdnBanner"].forEach(id=>document.getElementById(id).style.display="none");
   document.getElementById("otherPanels").innerHTML="";
-  const res = await fetch("/api/scan", {method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({target, modules:selectedModules()})});
-  const {job_id} = await res.json();
-  if(poll) clearInterval(poll);
-  poll = setInterval(()=>tick(job_id), 1000);
-  tick(job_id);
+  try{
+    const res = await fetch("/api/scan", {method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({target, modules:selectedModules()})});
+    if(!res.ok){
+      const err = await res.json().catch(()=>({detail:res.statusText}));
+      document.getElementById("status").textContent = `⚠ ${err.detail || "could not start scan"}`;
+      btn.disabled=false; btn.textContent="Scan";
+      return;
+    }
+    const {job_id} = await res.json();
+    if(poll) clearInterval(poll);
+    poll = setInterval(()=>tick(job_id), 1000);
+    tick(job_id);
+  }catch(e){
+    document.getElementById("status").textContent = "⚠ could not reach the dashboard";
+    btn.disabled=false; btn.textContent="Scan";
+  }
 });
 
 loadModules();
