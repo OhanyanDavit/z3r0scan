@@ -46,6 +46,22 @@ def test_dashboard_rejects_invalid_target():
     assert resp.status_code == 400
 
 
+def test_modules_endpoint_includes_tools():
+    """The dashboard needs each module's optional tools to render the tab body."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from z3r0scan.web.app import app
+
+    client = TestClient(app)
+    mods = client.get("/api/modules").json()
+    by_name = {m["name"]: m for m in mods}
+    assert "vuln_scan" in by_name
+    assert by_name["vuln_scan"]["tools"] == ["nuclei"]
+    # pure-Python modules report an empty tool list, not a missing key.
+    assert by_name["ai_scan"]["tools"] == []
+
+
 def test_dashboard_rejects_empty_module_selection():
     """Deselecting every module must NOT silently run the full registry."""
     pytest.importorskip("fastapi")

@@ -172,8 +172,15 @@ def scan_status(job_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/modules")
-def list_modules() -> list[dict[str, str]]:
-    return [{"name": n, "description": c.description} for n, c in REGISTRY.items()]
+def list_modules() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": n,
+            "description": c.description,
+            "tools": list(getattr(c, "optional_tools", ()) or ()),
+        }
+        for n, c in REGISTRY.items()
+    ]
 
 
 @app.get("/api/ai/providers")

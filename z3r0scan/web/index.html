@@ -7,47 +7,65 @@
 <style>
   :root{
     color-scheme:dark;
-    --crit:#f0506e; --high:#ff8c42; --med:#ffd23f; --low:#4cc38a; --info:#7d8db0;
-    --bg:#0a0c12; --bg2:#0e1118; --panel:#141824; --panel2:#1a1f2e;
-    --border:#252b3b; --border2:#2f3750;
+    --crit:#ff4d6d; --high:#ff8c42; --med:#ffd23f; --low:#4cc38a; --info:#7d8db0;
+    --bg:#070910; --bg2:#0c0f18; --panel:#111624; --panel2:#161c2c;
+    --border:#212838; --border2:#2c3448;
     --fg:#e6ebf5; --muted:#8a93a8; --dim:#5b6478;
-    --accent:#5b9dff; --accent2:#8b5cf6; --glow:rgba(91,157,255,.25);
-    --radius:14px; --shadow:0 8px 30px rgba(0,0,0,.35);
+    --accent:#5b9dff; --accent2:#8b5cf6; --term:#39e0a0;
+    --glow:rgba(91,157,255,.22); --tglow:rgba(57,224,160,.18);
+    --radius:14px; --shadow:0 10px 34px rgba(0,0,0,.42);
   }
   [data-theme="light"]{
     color-scheme:light;
-    --bg:#f4f6fb; --bg2:#eaeef6; --panel:#ffffff; --panel2:#f7f9fc;
-    --border:#e2e7f0; --border2:#d4dbe8;
-    --fg:#1a2030; --muted:#5b6478; --accent:#2f6fed; --accent2:#7c3aed;
-    --glow:rgba(47,111,237,.15); --shadow:0 8px 30px rgba(30,50,90,.08);
+    --bg:#f3f6fc; --bg2:#e9eef7; --panel:#ffffff; --panel2:#f6f9fd;
+    --border:#e1e7f1; --border2:#cfd8e8;
+    --fg:#161d2c; --muted:#5b6478; --dim:#8a93a8;
+    --accent:#2f6fed; --accent2:#7c3aed; --term:#0f9d63;
+    --glow:rgba(47,111,237,.14); --tglow:rgba(15,157,99,.12);
+    --shadow:0 10px 30px rgba(30,50,90,.08);
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
   body{
     font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
     background:
-      radial-gradient(1100px 500px at 80% -10%, var(--glow), transparent 60%),
+      radial-gradient(1200px 520px at 82% -12%, var(--glow), transparent 60%),
+      radial-gradient(900px 460px at 0% 0%, var(--tglow), transparent 55%),
       var(--bg);
     color:var(--fg); min-height:100vh; -webkit-font-smoothing:antialiased;
   }
-  code,.mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+  /* faint terminal grid */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+    background-image:
+      linear-gradient(var(--border) 1px,transparent 1px),
+      linear-gradient(90deg,var(--border) 1px,transparent 1px);
+    background-size:44px 44px;
+    -webkit-mask-image:radial-gradient(circle at 50% 0%,#000,transparent 75%);
+            mask-image:radial-gradient(circle at 50% 0%,#000,transparent 75%);
+    opacity:.06;
+  }
+  code,.mono{font-family:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace}
   a{color:var(--accent);text-decoration:none}
 
   /* ---------- header ---------- */
   header{
-    display:flex;align-items:center;gap:1rem;padding:1rem 1.6rem;
+    display:flex;align-items:center;gap:1rem;padding:.9rem 1.6rem;
     border-bottom:1px solid var(--border);
     background:linear-gradient(180deg,var(--bg2),transparent);
-    position:sticky;top:0;z-index:20;backdrop-filter:blur(8px);
+    position:sticky;top:0;z-index:20;backdrop-filter:blur(9px);
   }
   .logo{display:flex;align-items:center;gap:.7rem}
   .logo .mark{
-    width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+    width:36px;height:36px;border-radius:10px;display:grid;place-items:center;
     background:linear-gradient(135deg,var(--accent),var(--accent2));
-    color:#fff;font-weight:800;font-size:1rem;box-shadow:0 4px 14px var(--glow);
+    color:#fff;font-weight:800;font-size:1rem;box-shadow:0 5px 16px var(--glow);
+    font-family:ui-monospace,monospace;
   }
-  .logo h1{margin:0;font-size:1.15rem;letter-spacing:.3px;font-weight:700}
-  .logo .sub{color:var(--muted);font-size:.72rem;letter-spacing:.4px}
+  .logo h1{margin:0;font-size:1.15rem;letter-spacing:.4px;font-weight:800;font-family:ui-monospace,monospace}
+  .logo h1 .caret{color:var(--term);animation:blink 1.1s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+  .logo .sub{color:var(--muted);font-size:.68rem;letter-spacing:.5px;font-family:ui-monospace,monospace}
   .spacer{flex:1}
   .hbtn{
     display:inline-flex;align-items:center;gap:.4rem;background:var(--panel);
@@ -56,55 +74,104 @@
   }
   .hbtn:hover{border-color:var(--accent);color:var(--accent)}
 
-  .wrap{max-width:1180px;margin:0 auto;padding:1.6rem}
+  .wrap{max-width:1180px;margin:0 auto;padding:1.6rem;position:relative;z-index:1}
 
   /* ---------- scan bar ---------- */
   .searchcard{
     background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
-    padding:1.1rem 1.2rem;box-shadow:var(--shadow);
+    padding:1.1rem 1.2rem;box-shadow:var(--shadow);position:relative;overflow:hidden;
+  }
+  .searchcard::before{
+    content:"";position:absolute;inset:0 0 auto 0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--accent),var(--term),transparent);opacity:.6;
   }
   form.scan{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
-  .field{flex:1;min-width:260px;position:relative;display:flex;align-items:center}
-  .field .ic{position:absolute;left:.85rem;color:var(--muted);font-size:.95rem}
+  .field{flex:1;min-width:240px;position:relative;display:flex;align-items:center}
+  .field .ic{position:absolute;left:.85rem;color:var(--term);font-size:.95rem;font-family:ui-monospace,monospace}
   input[type=text]{
-    width:100%;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);
-    padding:.85rem .9rem .85rem 2.4rem;border-radius:11px;font:inherit;font-size:1rem;transition:.15s;
+    width:100%;min-width:0;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);
+    padding:.85rem .9rem .85rem 2.3rem;border-radius:11px;font:inherit;font-size:1rem;transition:.15s;
+    font-family:ui-monospace,monospace;
   }
   input[type=text]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--glow)}
   .btn{
     background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:0;
     padding:.85rem 1.5rem;border-radius:11px;font:inherit;font-weight:700;cursor:pointer;
-    transition:.15s;box-shadow:0 4px 16px var(--glow);
+    transition:.15s;box-shadow:0 4px 16px var(--glow);white-space:nowrap;
   }
   .btn:hover{filter:brightness(1.08)} .btn:disabled{opacity:.55;cursor:not-allowed;filter:grayscale(.3)}
   .btn.ghost{background:var(--panel2);color:var(--fg);border:1px solid var(--border2);box-shadow:none}
+  .btn.sm{padding:.5rem .9rem;font-size:.8rem}
 
-  .modrow{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.9rem;align-items:center}
-  .modrow .lbl{color:var(--muted);font-size:.78rem;margin-right:.2rem}
-  .toggle{
-    display:inline-flex;align-items:center;gap:.4rem;padding:.32rem .7rem;border-radius:20px;
-    border:1px solid var(--border2);background:var(--bg2);color:var(--muted);cursor:pointer;
-    font-size:.8rem;user-select:none;transition:.15s;
+  /* ---------- scanner console (tabs) ---------- */
+  .console{margin-top:1rem;border:1px solid var(--border);border-radius:var(--radius);
+    background:var(--panel);box-shadow:var(--shadow);overflow:hidden}
+  .console .chead{display:flex;align-items:center;gap:.6rem;padding:.55rem .8rem;
+    background:var(--bg2);border-bottom:1px solid var(--border);font-family:ui-monospace,monospace}
+  .console .chead .dotpair{display:flex;gap:.35rem}
+  .console .chead .cd{width:10px;height:10px;border-radius:50%}
+  .cd.r{background:#ff5f57}.cd.y{background:#febc2e}.cd.g{background:#28c840}
+  .console .chead .ctitle{color:var(--muted);font-size:.74rem;letter-spacing:.4px}
+  .console .chead .armcount{margin-left:auto;color:var(--term);font-size:.72rem}
+
+  .tabbar{display:flex;gap:.25rem;overflow-x:auto;padding:.45rem .5rem 0;background:var(--bg2);
+    border-bottom:1px solid var(--border);scrollbar-width:thin}
+  .tab{
+    display:inline-flex;align-items:center;gap:.45rem;padding:.5rem .75rem;cursor:pointer;
+    border:1px solid transparent;border-bottom:0;border-radius:9px 9px 0 0;
+    color:var(--muted);font-size:.82rem;white-space:nowrap;transition:.15s;user-select:none;
+    font-family:ui-monospace,monospace;position:relative;top:1px;
   }
-  .toggle.on{border-color:var(--accent);color:var(--fg);background:color-mix(in srgb,var(--accent) 12%,var(--bg2))}
-  .toggle .dot{width:7px;height:7px;border-radius:50%;background:var(--border2)}
-  .toggle.on .dot{background:var(--accent);box-shadow:0 0 8px var(--accent)}
-  .ai-pill{margin-left:auto}
-  .ai-pill.on{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 14%,var(--bg2))}
-  .ai-pill.on .dot{background:var(--accent2);box-shadow:0 0 8px var(--accent2)}
+  .tab:hover{color:var(--fg)}
+  .tab.active{background:var(--panel);border-color:var(--border);color:var(--fg)}
+  .tab .arm{width:7px;height:7px;border-radius:50%;background:var(--border2);transition:.15s}
+  .tab.armed .arm{background:var(--term);box-shadow:0 0 8px var(--term)}
+  .tab.armed.ai .arm{background:var(--accent2);box-shadow:0 0 8px var(--accent2)}
+  .tab .ic{font-size:.9rem}
+
+  .tabbody{padding:1.15rem 1.25rem;min-height:118px;display:flex;gap:1rem;align-items:flex-start}
+  .tabbody .info{flex:1;min-width:0}
+  .tabbody .tname{font-family:ui-monospace,monospace;font-size:1rem;font-weight:700;
+    display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+  .kbadge{font-size:.62rem;letter-spacing:.5px;text-transform:uppercase;padding:.12rem .45rem;
+    border-radius:6px;border:1px solid var(--border2);color:var(--muted);font-family:ui-monospace,monospace}
+  .kbadge.active{color:var(--high);border-color:color-mix(in srgb,var(--high) 45%,transparent)}
+  .kbadge.passive{color:var(--low);border-color:color-mix(in srgb,var(--low) 45%,transparent)}
+  .kbadge.ai{color:var(--accent2);border-color:color-mix(in srgb,var(--accent2) 45%,transparent)}
+  .tdesc{color:var(--muted);font-size:.86rem;line-height:1.55;margin:.5rem 0 0}
+  .treq{margin-top:.6rem;font-size:.75rem;color:var(--dim);font-family:ui-monospace,monospace}
+  .treq b{color:var(--muted);font-weight:600}
+  .tabactions{padding:.6rem .8rem;border-top:1px solid var(--border);display:flex;align-items:center;
+    gap:.5rem;background:var(--bg2);font-size:.76rem;color:var(--muted)}
+  .tabactions .qa{margin-left:auto;display:flex;gap:.4rem}
+  .linkish{background:none;border:0;color:var(--accent);cursor:pointer;font:inherit;font-size:.76rem;padding:.15rem .3rem}
+  .linkish:hover{text-decoration:underline}
+
+  /* big toggle switch (per scanner) */
+  .switch{display:inline-flex;align-items:center;gap:.6rem;cursor:pointer;user-select:none}
+  .switch input{display:none}
+  .switch .track{width:46px;height:25px;border-radius:20px;background:var(--border2);position:relative;transition:.2s;flex:none}
+  .switch .track::after{content:"";position:absolute;top:2.5px;left:2.5px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}
+  .switch input:checked + .track{background:var(--term)}
+  .switch input:checked + .track::after{transform:translateX(21px)}
+  .switch.ai input:checked + .track{background:var(--accent2)}
+  .switch .lbl{font-family:ui-monospace,monospace;font-size:.78rem;color:var(--muted);min-width:34px}
+  .switch.big{flex-direction:column;gap:.35rem;align-items:center}
 
   /* ---------- status / progress ---------- */
-  .statusbar{display:flex;align-items:center;gap:.8rem;margin:1.1rem 0;color:var(--muted);font-size:.9rem;min-height:1.4em;flex-wrap:wrap}
+  .statusbar{display:flex;align-items:center;gap:.7rem;margin:1.1rem 0;color:var(--muted);
+    font-size:.9rem;min-height:1.4em;flex-wrap:wrap;font-family:ui-monospace,monospace}
+  .statusbar .prompt{color:var(--term)}
   .spinner{width:1em;height:1em;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .badge-done{color:var(--low);font-weight:600}
+  .badge-done{color:var(--low);font-weight:700}
 
   /* ---------- severity summary ---------- */
   .summary{display:grid;grid-template-columns:repeat(5,1fr);gap:.7rem;margin:1rem 0 1.3rem}
   @media(max-width:640px){.summary{grid-template-columns:repeat(2,1fr)}}
   .stat{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:.8rem .9rem;position:relative;overflow:hidden}
-  .stat .n{font-size:1.7rem;font-weight:800;line-height:1}
-  .stat .k{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:.3rem}
+  .stat .n{font-size:1.7rem;font-weight:800;line-height:1;font-family:ui-monospace,monospace}
+  .stat .k{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-top:.3rem;font-family:ui-monospace,monospace}
   .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
   .stat.critical::before{background:var(--crit)} .stat.critical .n{color:var(--crit)}
   .stat.high::before{background:var(--high)} .stat.high .n{color:var(--high)}
@@ -119,12 +186,12 @@
   .cols{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}
   @media(max-width:860px){.cols{grid-template-columns:1fr}}
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.2rem;box-shadow:var(--shadow)}
-  .panel h2{margin:.1rem 0 .3rem;font-size:1rem;display:flex;align-items:center;gap:.5rem}
-  .panel h2 .st{margin-left:auto;font-size:.7rem;color:var(--muted);font-weight:500;border:1px solid var(--border2);padding:.1rem .5rem;border-radius:20px}
+  .panel h2{margin:.1rem 0 .3rem;font-size:1rem;display:flex;align-items:center;gap:.5rem;font-family:ui-monospace,monospace}
+  .panel h2 .st{margin-left:auto;font-size:.68rem;color:var(--muted);font-weight:500;border:1px solid var(--border2);padding:.1rem .5rem;border-radius:20px;font-family:ui-monospace,monospace}
   .panel .detail{color:var(--muted);font-size:.8rem;margin:.2rem 0 .7rem}
   .f{padding:.55rem 0;border-bottom:1px solid var(--border);font-size:.9rem}
   .f:last-child{border-bottom:0}
-  .sev{display:inline-block;color:#04101f;padding:.08rem .5rem;border-radius:6px;font-size:.68rem;font-weight:800;margin-right:.5rem;letter-spacing:.3px;vertical-align:1px}
+  .sev{display:inline-block;padding:.08rem .5rem;border-radius:6px;font-size:.66rem;font-weight:800;margin-right:.5rem;letter-spacing:.3px;vertical-align:1px;font-family:ui-monospace,monospace}
   .sev-critical{background:var(--crit);color:#fff}.sev-high{background:var(--high);color:#1a1000}
   .sev-medium{background:var(--med);color:#1a1600}.sev-low{background:var(--low);color:#04140c}.sev-info{background:var(--info);color:#fff}
   .desc{color:var(--muted);font-size:.8rem;margin:.3rem 0 0 3rem}
@@ -134,47 +201,49 @@
   .aipanel{background:linear-gradient(180deg,color-mix(in srgb,var(--accent2) 8%,var(--panel)),var(--panel));
     border:1px solid var(--border);border-left:3px solid var(--accent2);border-radius:var(--radius);
     padding:1.1rem 1.3rem;margin:0 0 1.3rem;box-shadow:var(--shadow)}
-  .aipanel h2{margin:0 0 .2rem;font-size:1.05rem;display:flex;align-items:center;gap:.5rem}
-  .aipanel .meta{color:var(--muted);font-size:.76rem;margin-bottom:.6rem}
+  .aipanel h2{margin:0 0 .2rem;font-size:1.05rem;display:flex;align-items:center;gap:.5rem;font-family:ui-monospace,monospace}
+  .aipanel .meta{color:var(--muted);font-size:.74rem;margin-bottom:.6rem;font-family:ui-monospace,monospace}
   .md h4,.md h5,.md h6{color:var(--accent);margin:1rem 0 .3rem;font-size:.95rem}
   .md p{margin:.4rem 0;line-height:1.55} .md ul{margin:.3rem 0;padding-left:1.3rem} .md li{margin:.2rem 0;line-height:1.5}
   .md code{background:var(--bg2);padding:.1rem .35rem;border-radius:5px;font-size:.85em}
   .md strong{color:var(--fg)}
   .ai-empty{color:var(--muted);font-size:.88rem}
 
-  footer{color:var(--muted);font-size:.78rem;text-align:center;padding:2.4rem 1rem}
+  footer{color:var(--muted);font-size:.76rem;text-align:center;padding:2.4rem 1rem;font-family:ui-monospace,monospace;position:relative;z-index:1}
 
   /* ---------- modal ---------- */
-  .overlay{position:fixed;inset:0;background:rgba(4,6,12,.6);backdrop-filter:blur(4px);
+  .overlay{position:fixed;inset:0;background:rgba(4,6,12,.62);backdrop-filter:blur(4px);
     display:none;align-items:center;justify-content:center;z-index:50;padding:1rem}
   .overlay.open{display:flex}
   .modal{background:var(--panel);border:1px solid var(--border2);border-radius:16px;
-    width:100%;max-width:560px;max-height:90vh;overflow:auto;box-shadow:0 30px 80px rgba(0,0,0,.5)}
-  .modal .mh{display:flex;align-items:center;padding:1.1rem 1.3rem;border-bottom:1px solid var(--border)}
-  .modal .mh h3{margin:0;font-size:1.05rem}
-  .modal .mh .x{margin-left:auto;background:none;border:0;color:var(--muted);font-size:1.4rem;cursor:pointer;line-height:1}
-  .modal .mb{padding:1.2rem 1.3rem;display:flex;flex-direction:column;gap:1.1rem}
-  .modal .mf{padding:1rem 1.3rem;border-top:1px solid var(--border);display:flex;gap:.6rem;justify-content:flex-end}
-  .grp label{display:block;font-size:.82rem;font-weight:600;margin-bottom:.35rem}
-  .grp .hint{color:var(--muted);font-size:.74rem;margin-top:.3rem;line-height:1.4}
-  .keyrow{display:flex;gap:.5rem}
+    width:100%;max-width:580px;max-height:90vh;display:flex;flex-direction:column;
+    box-shadow:0 30px 90px rgba(0,0,0,.55);overflow:hidden}
+  .modal .mh{display:flex;align-items:center;padding:1.05rem 1.3rem;border-bottom:1px solid var(--border);
+    background:var(--bg2);flex:none}
+  .modal .mh h3{margin:0;font-size:1.02rem;font-family:ui-monospace,monospace}
+  .modal .mh .x{margin-left:auto;background:none;border:0;color:var(--muted);font-size:1.5rem;cursor:pointer;line-height:1}
+  .modal .mh .x:hover{color:var(--fg)}
+  .modal .mb{padding:1.2rem 1.3rem;display:flex;flex-direction:column;gap:1.15rem;overflow:auto;flex:1}
+  .modal .mf{padding:.9rem 1.3rem;border-top:1px solid var(--border);display:flex;gap:.6rem;
+    justify-content:flex-end;background:var(--bg2);flex:none}
+  .grp{min-width:0}
+  .grp > label{display:block;font-size:.82rem;font-weight:600;margin-bottom:.4rem}
+  .grp .hint{color:var(--muted);font-size:.74rem;margin-top:.4rem;line-height:1.45}
+  .keyrow{display:flex;gap:.5rem;align-items:stretch}
   .keyrow input{
-    flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);
-    padding:.6rem .7rem;border-radius:9px;font:inherit;font-size:.88rem
+    flex:1;min-width:0;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);
+    padding:.62rem .7rem;border-radius:9px;font:inherit;font-size:.88rem;font-family:ui-monospace,monospace
   }
   .keyrow input:focus{outline:none;border-color:var(--accent)}
-  .keyrow .test{white-space:nowrap;padding:.6rem .8rem;font-size:.8rem}
-  select{background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:.6rem .7rem;border-radius:9px;font:inherit;width:100%}
-  .seghead{display:flex;align-items:center;gap:.5rem;font-size:.72rem;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin:.2rem 0}
+  .keyrow .test{flex:none;white-space:nowrap;padding:.62rem .9rem;font-size:.8rem}
+  select{background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:.62rem .7rem;border-radius:9px;font:inherit;width:100%}
+  .seghead{display:flex;align-items:center;gap:.6rem;font-size:.7rem;letter-spacing:.7px;text-transform:uppercase;color:var(--term);font-family:ui-monospace,monospace}
+  .seghead::before{content:"//";opacity:.6}
   .seghead::after{content:"";flex:1;height:1px;background:var(--border)}
-  .tstat{font-size:.76rem;margin-top:.35rem;min-height:1.1em}
+  .tstat{font-size:.76rem;margin-top:.4rem;min-height:1.1em;font-family:ui-monospace,monospace}
   .tstat.ok{color:var(--low)} .tstat.err{color:var(--crit)}
-  .switch{display:flex;align-items:center;gap:.6rem;cursor:pointer;user-select:none}
-  .switch input{display:none}
-  .switch .track{width:40px;height:22px;border-radius:20px;background:var(--border2);position:relative;transition:.2s}
-  .switch .track::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s}
-  .switch input:checked + .track{background:var(--accent2)}
-  .switch input:checked + .track::after{transform:translateX(18px)}
+  .card{background:var(--panel2);border:1px solid var(--border);border-radius:11px;padding:.85rem .95rem}
+  .row-between{display:flex;align-items:center;justify-content:space-between;gap:1rem}
 
   /* toast */
   .toast{position:fixed;bottom:1.2rem;right:1.2rem;background:var(--panel2);border:1px solid var(--border2);
@@ -189,7 +258,7 @@
   <div class="logo">
     <div class="mark">z3</div>
     <div>
-      <h1>z3r0scan</h1>
+      <h1>z3r0scan<span class="caret">_</span></h1>
       <div class="sub">RECON &amp; SCAN ORCHESTRATOR · AUTHORIZED TESTING ONLY</div>
     </div>
   </div>
@@ -202,17 +271,28 @@
   <div class="searchcard">
     <form class="scan" id="scanForm">
       <div class="field">
-        <span class="ic">🎯</span>
-        <input type="text" id="target" placeholder="target — e.g. scanme.nmap.org, 1.2.3.4, http://host:8080" autocomplete="off" autofocus>
+        <span class="ic">▸</span>
+        <input type="text" id="target" placeholder="target — scanme.nmap.org · 1.2.3.4 · http://host:8080" autocomplete="off" autofocus>
       </div>
-      <button type="submit" class="btn" id="scanBtn">Scan</button>
+      <button type="submit" class="btn" id="scanBtn">Run scan</button>
     </form>
-    <div class="modrow" id="modrow">
-      <span class="lbl">Modules:</span>
-      <!-- module toggles injected -->
-      <label class="toggle ai-pill" id="aiToggle" title="Send findings to your configured LLM for triage">
-        <span class="dot"></span> 🤖 AI analysis
-      </label>
+
+    <!-- scanner console with per-module tabs -->
+    <div class="console">
+      <div class="chead">
+        <div class="dotpair"><span class="cd r"></span><span class="cd y"></span><span class="cd g"></span></div>
+        <span class="ctitle">scan modules</span>
+        <span class="armcount" id="armCount"></span>
+      </div>
+      <div class="tabbar" id="tabbar"><!-- tabs injected --></div>
+      <div class="tabbody" id="tabbody"><!-- active tab injected --></div>
+      <div class="tabactions">
+        <span id="tabHintFoot">click a tab to configure a scanner · flip its switch to arm it</span>
+        <span class="qa">
+          <button class="linkish" id="armAll">arm all</button>
+          <button class="linkish" id="armNone">disarm all</button>
+        </span>
+      </div>
     </div>
   </div>
 
@@ -223,7 +303,7 @@
     <div class="banner" id="cdnBanner" style="display:none"></div>
 
     <div class="aipanel" id="aiPanel" style="display:none">
-      <h2>🤖 AI analysis</h2>
+      <h2>🤖 AI triage</h2>
       <div class="meta" id="aiMeta"></div>
       <div class="md" id="aiBody"></div>
     </div>
@@ -251,12 +331,14 @@
   <div class="modal">
     <div class="mh"><h3>⚙️ Settings &amp; API keys</h3><button class="x" id="closeSettings">×</button></div>
     <div class="mb">
-      <div class="grp">
-        <label class="switch">
-          <input type="checkbox" id="s_ai_enabled"><span class="track"></span>
-          <span>Enable AI analysis of findings</span>
-        </label>
-        <div class="hint">Runs after every scan and sends the findings to your chosen LLM for triage. Bring your own key — nothing is sent anywhere else.</div>
+      <div class="card">
+        <div class="row-between">
+          <div>
+            <label style="margin:0;font-weight:600">Enable AI triage of findings</label>
+            <div class="hint" style="margin-top:.25rem">Runs after every scan and sends the findings to your chosen LLM for triage. Bring your own key.</div>
+          </div>
+          <label class="switch ai"><input type="checkbox" id="s_ai_enabled"><span class="track"></span></label>
+        </div>
       </div>
 
       <div class="seghead">AI provider</div>
@@ -271,7 +353,7 @@
       </div>
       <div class="grp">
         <label>Model <span style="color:var(--muted);font-weight:400">(optional override)</span></label>
-        <div class="keyrow"><input type="text" id="s_ai_model" placeholder="e.g. claude-opus-5 or gpt-4o"></div>
+        <input type="text" id="s_ai_model" class="mono" style="width:100%;min-width:0;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:.62rem .7rem;border-radius:9px;font:inherit;font-size:.88rem" placeholder="e.g. claude-opus-5 or gpt-4o">
       </div>
 
       <div class="seghead">Claude / Anthropic API token</div>
@@ -281,7 +363,7 @@
           <button class="btn ghost test" data-provider="anthropic">Test</button>
         </div>
         <div class="tstat" id="tstat_anthropic"></div>
-        <div class="hint">Used for Claude models. Also read from the <code>ANTHROPIC_API_KEY</code> env var if left blank.</div>
+        <div class="hint">Used for Claude models. Also read from the <code>ANTHROPIC_API_KEY</code> env var if blank.</div>
       </div>
 
       <div class="seghead">GPT / OpenAI API token</div>
@@ -291,7 +373,7 @@
           <button class="btn ghost test" data-provider="openai">Test</button>
         </div>
         <div class="tstat" id="tstat_openai"></div>
-        <div class="hint">Used for GPT models. Also read from the <code>OPENAI_API_KEY</code> env var if left blank.</div>
+        <div class="hint">Used for GPT models. Also read from the <code>OPENAI_API_KEY</code> env var if blank.</div>
       </div>
 
       <div class="seghead">Shodan (passive enrichment)</div>
@@ -313,6 +395,23 @@
 const SEV_ORDER = ["critical","high","medium","low","info"];
 const LS_KEY = "z3r0scan.settings";
 let poll = null;
+
+// Presentation metadata per module (backend stays the source of truth for names).
+const MODULE_META = {
+  host_scan:  {icon:"🖥", short:"host",    full:"Host / port scan",       kind:"active"},
+  subdomains: {icon:"🔍", short:"subs",    full:"Subdomain recon",        kind:"passive"},
+  web_probe:  {icon:"🌐", short:"web",     full:"Web probe",              kind:"active"},
+  vuln_scan:  {icon:"☢",  short:"vuln",    full:"Vulnerability scan",     kind:"active"},
+  shodan:     {icon:"🛰", short:"shodan",  full:"Shodan enrichment",      kind:"passive"},
+  ai_scan:    {icon:"🤖", short:"ai-scan", full:"AI active scan",         kind:"ai"},
+};
+const AI_TAB = "__ai_triage__";  // synthetic tab id for the post-scan triage feature
+
+// UI state
+let MODULES = [];                 // [{name, description, tools[]}]
+const armed = {};                 // name -> bool (scan modules)
+let aiTriageOn = false;           // AI triage (post-scan) enabled
+let activeTab = null;
 
 /* ---------- settings persistence ---------- */
 function loadSettings(){
@@ -337,32 +436,101 @@ function applySettingsToForm(s){
   document.getElementById("s_anthropic_key").value = s.anthropic_key || "";
   document.getElementById("s_openai_key").value = s.openai_key || "";
   document.getElementById("s_shodan_key").value = s.shodan_key || "";
-  syncAiPill(!!s.ai_enabled);
-}
-function syncAiPill(on){
-  document.getElementById("aiToggle").classList.toggle("on", on);
 }
 
 /* ---------- theme ---------- */
 function applyTheme(t){ document.documentElement.setAttribute("data-theme", t); }
 
-/* ---------- modules ---------- */
+/* ---------- scanner console (tabs) ---------- */
+function metaFor(name){ return MODULE_META[name] || {icon:"▷", short:name, full:name, kind:"active"}; }
+
 async function loadModules(){
-  const mods = await (await fetch("/api/modules")).json();
-  const row = document.getElementById("modrow");
-  const aiToggle = document.getElementById("aiToggle");
-  mods.forEach(m=>{
-    const el = document.createElement("label");
-    el.className = "toggle on";
-    el.dataset.mod = m.name;
-    el.title = m.description;           // .title is a text property — no injection
-    el.innerHTML = `<span class="dot"></span> ${esc(m.name)}`;
-    el.addEventListener("click", ()=> el.classList.toggle("on"));
-    row.insertBefore(el, aiToggle);
+  try{ MODULES = await (await fetch("/api/modules")).json(); }catch{ MODULES = []; }
+  MODULES.forEach(m=>{ armed[m.name] = true; });          // default: everything armed
+  aiTriageOn = !!loadSettings().ai_enabled;
+  activeTab = MODULES.length ? MODULES[0].name : AI_TAB;
+  buildTabs();
+  renderTab();
+  updateArmCount();
+}
+
+function buildTabs(){
+  const bar = document.getElementById("tabbar");
+  bar.innerHTML = "";
+  MODULES.forEach(m=>{
+    const meta = metaFor(m.name);
+    const t = document.createElement("div");
+    t.className = "tab" + (m.name===activeTab?" active":"") + (armed[m.name]?" armed":"");
+    t.dataset.tab = m.name;
+    t.innerHTML = `<span class="arm"></span><span class="ic">${meta.icon}</span>${esc(meta.short)}`;
+    t.addEventListener("click", ()=>{ activeTab=m.name; buildTabs(); renderTab(); });
+    bar.appendChild(t);
+  });
+  // AI triage synthetic tab (post-scan analysis, not a scanner module)
+  const at = document.createElement("div");
+  at.className = "tab ai" + (activeTab===AI_TAB?" active":"") + (aiTriageOn?" armed":"");
+  at.dataset.tab = AI_TAB;
+  at.innerHTML = `<span class="arm"></span><span class="ic">⚡</span>triage`;
+  at.addEventListener("click", ()=>{ activeTab=AI_TAB; buildTabs(); renderTab(); });
+  bar.appendChild(at);
+}
+
+function renderTab(){
+  const body = document.getElementById("tabbody");
+  if(activeTab===AI_TAB){
+    body.innerHTML = `
+      <div class="info">
+        <div class="tname">⚡ AI triage <span class="kbadge ai">post-scan</span></div>
+        <div class="tdesc">Sends every finding produced by the scan to your configured LLM (Claude or GPT) for a ranked, human-readable triage. This is <b>not</b> a scanner — it reviews results after the other modules run. Configure your key in Settings.</div>
+        <div class="treq"><b>needs:</b> an AI API key · <b>output:</b> executive summary + prioritized findings</div>
+      </div>
+      <label class="switch ai big">
+        <input type="checkbox" id="tabToggle" ${aiTriageOn?"checked":""}>
+        <span class="track"></span><span class="lbl" id="tabToggleLbl">${aiTriageOn?"ON":"OFF"}</span>
+      </label>`;
+    document.getElementById("tabToggle").addEventListener("change", e=>{
+      aiTriageOn = e.target.checked;
+      document.getElementById("tabToggleLbl").textContent = aiTriageOn?"ON":"OFF";
+      const s=loadSettings(); s.ai_enabled=aiTriageOn; saveSettings(s);
+      const tab=document.querySelector(`.tab[data-tab="${AI_TAB}"]`);
+      if(tab) tab.classList.toggle("armed", aiTriageOn);
+      updateArmCount();
+    });
+    return;
+  }
+  const m = MODULES.find(x=>x.name===activeTab);
+  if(!m){ body.innerHTML=""; return; }
+  const meta = metaFor(m.name);
+  const on = !!armed[m.name];
+  const tools = (m.tools&&m.tools.length)
+    ? `<b>optional tools:</b> ${m.tools.map(esc).join(", ")} (falls back / skips cleanly if missing)`
+    : `<b>runtime:</b> pure Python — no external tools required`;
+  body.innerHTML = `
+    <div class="info">
+      <div class="tname">${meta.icon} <span class="mono">${esc(m.name)}</span>
+        <span class="kbadge ${meta.kind}">${meta.kind}</span></div>
+      <div class="tdesc">${esc(m.description||meta.full)}</div>
+      <div class="treq">${tools}</div>
+    </div>
+    <label class="switch big">
+      <input type="checkbox" id="tabToggle" ${on?"checked":""}>
+      <span class="track"></span><span class="lbl" id="tabToggleLbl">${on?"ARMED":"OFF"}</span>
+    </label>`;
+  document.getElementById("tabToggle").addEventListener("change", e=>{
+    armed[m.name] = e.target.checked;
+    document.getElementById("tabToggleLbl").textContent = e.target.checked?"ARMED":"OFF";
+    const tab=document.querySelector(`.tab[data-tab="${m.name}"]`);
+    if(tab) tab.classList.toggle("armed", e.target.checked);
+    updateArmCount();
   });
 }
-function selectedModules(){
-  return [...document.querySelectorAll("#modrow .toggle.on[data-mod]")].map(el=>el.dataset.mod);
+
+function selectedModules(){ return MODULES.map(m=>m.name).filter(n=>armed[n]); }
+
+function updateArmCount(){
+  const n = selectedModules().length, total = MODULES.length;
+  document.getElementById("armCount").textContent =
+    `${n}/${total} armed${aiTriageOn?" · triage on":""}`;
 }
 
 /* ---------- AI provider hint ---------- */
@@ -404,24 +572,21 @@ function findingHTML(f){
 function render(data){
   document.getElementById("results").style.display="block";
 
-  // summary stat tiles
   document.getElementById("summary").innerHTML = SEV_ORDER.map(s=>
     `<div class="stat ${s}"><div class="n">${data.severity_counts[s]}</div><div class="k">${s}</div></div>`).join("");
 
-  // status line
   const st=document.getElementById("status");
   if(!data.done){
     const cur = data.current_module ? ` — ${esc(data.current_module)}${data.current_module==="ai_analysis"?" (thinking…)":""}` : "";
-    st.innerHTML = `<span class="spinner"></span> scanning${cur} · ${data.duration}s`;
+    st.innerHTML = `<span class="prompt">▸</span><span class="spinner"></span> scanning${cur} · ${data.duration}s`;
   }else if(data.error){
-    st.textContent = `⚠ scan failed: ${data.error}`;
+    st.innerHTML = `<span class="prompt">▸</span> ⚠ scan failed: ${esc(data.error)}`;
   }else{
-    st.innerHTML = `<span class="badge-done">✔ done in ${data.duration}s</span> · top severity: <b>${(data.top_severity||"none").toUpperCase()}</b>`;
+    st.innerHTML = `<span class="prompt">▸</span> <span class="badge-done">✔ done in ${data.duration}s</span> · top severity: <b>${(data.top_severity||"none").toUpperCase()}</b>`;
   }
 
   const byName={}; data.modules.forEach(m=>byName[m.module]=m);
 
-  // AI panel
   const ai=data.ai;
   const aiPanel=document.getElementById("aiPanel");
   if(ai){
@@ -433,21 +598,21 @@ function render(data){
     }else if(ai.status==="error"){
       document.getElementById("aiBody").innerHTML = `<div class="ai-empty">⚠ ${esc(ai.detail)}</div>`;
     }else{
-      document.getElementById("aiBody").innerHTML = `<div class="ai-empty">${esc(ai.detail||"AI analysis skipped")}</div>`;
+      document.getElementById("aiBody").innerHTML = `<div class="ai-empty">${esc(ai.detail||"AI triage skipped")}</div>`;
     }
   }else if(data.current_module==="ai_analysis"){
     aiPanel.style.display="block";
     document.getElementById("aiMeta").textContent="";
     document.getElementById("aiBody").innerHTML=`<div class="ai-empty"><span class="spinner"></span> generating analysis…</div>`;
+  }else{
+    aiPanel.style.display="none";
   }
 
-  // CDN banner
   const banner=document.getElementById("cdnBanner");
   const host=byName["host_scan"];
   const cdnF=host && host.findings.find(f=>f.evidence && f.evidence.cdn);
   if(cdnF){banner.style.display="block";banner.textContent="⚠ "+cdnF.description;}else banner.style.display="none";
 
-  // host panel
   if(host){
     document.getElementById("hostPanel").style.display="block";
     document.getElementById("hostSt").textContent=host.status;
@@ -455,8 +620,8 @@ function render(data){
     const fs=host.findings.filter(f=>!(f.evidence&&f.evidence.cdn));
     document.getElementById("hostFindings").innerHTML=
       fs.length?fs.map(findingHTML).join(""):`<div class="none">No open ports found.</div>`;
-  }
-  // web panel
+  }else document.getElementById("hostPanel").style.display="none";
+
   const web=byName["web_probe"];
   if(web){
     document.getElementById("webPanel").style.display="block";
@@ -464,31 +629,28 @@ function render(data){
     document.getElementById("webDetail").textContent=web.detail||"";
     document.getElementById("webFindings").innerHTML=
       web.findings.length?web.findings.map(findingHTML).join(""):`<div class="none">No web service responded.</div>`;
-  }
-  // other panels
+  }else document.getElementById("webPanel").style.display="none";
+
   const other=data.modules.filter(m=>!["host_scan","web_probe"].includes(m.module));
-  document.getElementById("otherPanels").innerHTML=other.map(m=>
-    `<div class="panel" style="margin-top:1.1rem"><h2>${esc(m.module)}<span class="st">${esc(m.status)}</span></h2>`
+  document.getElementById("otherPanels").innerHTML=other.map(m=>{
+    const meta=metaFor(m.module);
+    return `<div class="panel" style="margin-top:1.1rem"><h2>${meta.icon} <span class="mono">${esc(m.module)}</span><span class="st">${esc(m.status)}</span></h2>`
     +(m.detail?`<div class="detail">${esc(m.detail)}</div>`:"")
     +(m.findings.length?m.findings.map(findingHTML).join(""):`<div class="none">No findings.</div>`)
-    +`</div>`).join("");
+    +`</div>`;
+  }).join("");
 }
 
 function stopPolling(){
   if(poll){ clearInterval(poll); poll=null; }
-  const b=document.getElementById("scanBtn"); b.disabled=false; b.textContent="Scan";
-}
-
-function stopPolling(){
-  if(poll){ clearInterval(poll); poll=null; }
-  const b=document.getElementById("scanBtn"); b.disabled=false; b.textContent="Scan";
+  const b=document.getElementById("scanBtn"); b.disabled=false; b.textContent="Run scan";
 }
 
 async function tick(jobId){
   try{
     const res = await fetch(`/api/scan/${jobId}`);
     if(!res.ok){
-      document.getElementById("status").textContent = `⚠ status ${res.status}: ${res.statusText}`;
+      document.getElementById("status").innerHTML = `<span class="prompt">▸</span> ⚠ status ${res.status}: ${esc(res.statusText)}`;
       if(res.status === 404) stopPolling();
       return;
     }
@@ -496,7 +658,7 @@ async function tick(jobId){
     render(data);
     if(data.done) stopPolling();
   }catch(e){
-    document.getElementById("status").textContent = "⚠ lost connection to the dashboard";
+    document.getElementById("status").innerHTML = `<span class="prompt">▸</span> ⚠ lost connection to the dashboard`;
   }
 }
 
@@ -504,27 +666,28 @@ async function tick(jobId){
 document.getElementById("scanForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const target=document.getElementById("target").value.trim();
-  if(!target)return;
+  if(!target){ toast("enter a target first","err"); return; }
   const s=loadSettings();
-  const btn=document.getElementById("scanBtn");btn.disabled=true;btn.textContent="Scanning…";
+  const btn=document.getElementById("scanBtn");
+  const setStatus=(html)=>document.getElementById("status").innerHTML=`<span class="prompt">▸</span> ${html}`;
   document.getElementById("cdnBanner").style.display="none";
   document.getElementById("aiPanel").style.display="none";
   document.getElementById("otherPanels").innerHTML="";
-  const aiOn = document.getElementById("aiToggle").classList.contains("on");
+
   const mods = selectedModules();
   if(!mods.length){
-    document.getElementById("status").textContent = aiOn
-      ? "⚠ AI analysis triages scan results — also enable at least one scan module (host, subdomains, web, vuln…)"
-      : "⚠ select at least one module to scan";
-    btn.disabled=false; btn.textContent="Scan";
+    setStatus(aiTriageOn
+      ? "⚠ AI triage runs on scan results — arm at least one scan module (host, subs, web, vuln…)"
+      : "⚠ arm at least one scan module");
     return;
   }
+  btn.disabled=true; btn.textContent="Scanning…";
   const body={
     target,
     modules:mods,
     shodan_api_key: s.shodan_key || null,
     ai:{
-      enabled: aiOn,
+      enabled: aiTriageOn,
       provider: s.ai_provider || "auto",
       model: s.ai_model || null,
       anthropic_api_key: s.anthropic_key || null,
@@ -536,8 +699,8 @@ document.getElementById("scanForm").addEventListener("submit",async e=>{
       body:JSON.stringify(body)});
     if(!res.ok){
       const err = await res.json().catch(()=>({detail:res.statusText}));
-      document.getElementById("status").textContent = `⚠ ${err.detail || "could not start scan"}`;
-      btn.disabled=false; btn.textContent="Scan";
+      setStatus(`⚠ ${esc(err.detail || "could not start scan")}`);
+      btn.disabled=false; btn.textContent="Run scan";
       return;
     }
     const {job_id} = await res.json();
@@ -545,15 +708,17 @@ document.getElementById("scanForm").addEventListener("submit",async e=>{
     poll = setInterval(()=>tick(job_id), 1000);
     tick(job_id);
   }catch(e){
-    document.getElementById("status").textContent = "⚠ could not reach the dashboard";
-    btn.disabled=false; btn.textContent="Scan";
+    setStatus("⚠ could not reach the dashboard");
+    btn.disabled=false; btn.textContent="Run scan";
   }
 });
 
-/* AI pill toggles the persisted enabled flag too */
-document.getElementById("aiToggle").addEventListener("click",()=>{
-  const on=document.getElementById("aiToggle").classList.toggle("on");
-  const s=loadSettings(); s.ai_enabled=on; saveSettings(s);
+/* arm all / none quick actions */
+document.getElementById("armAll").addEventListener("click",()=>{
+  MODULES.forEach(m=>armed[m.name]=true); buildTabs(); renderTab(); updateArmCount();
+});
+document.getElementById("armNone").addEventListener("click",()=>{
+  MODULES.forEach(m=>armed[m.name]=false); buildTabs(); renderTab(); updateArmCount();
 });
 
 /* ---------- settings modal ---------- */
@@ -563,13 +728,19 @@ function closeSettings(){ overlay.classList.remove("open"); }
 document.getElementById("settingsBtn").addEventListener("click",openSettings);
 document.getElementById("closeSettings").addEventListener("click",closeSettings);
 overlay.addEventListener("click",e=>{if(e.target===overlay)closeSettings();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeSettings();});
 document.getElementById("saveSettings").addEventListener("click",()=>{
-  const s=currentSettings(); saveSettings(s); syncAiPill(s.ai_enabled); closeSettings();
+  const s=currentSettings(); saveSettings(s);
+  aiTriageOn = s.ai_enabled;                 // keep the triage tab in sync
+  buildTabs(); renderTab(); updateArmCount();
+  closeSettings();
   toast("Settings saved","ok");
 });
 document.getElementById("clearKeys").addEventListener("click",()=>{
   if(!confirm("Clear all saved keys and settings from this browser?"))return;
-  localStorage.removeItem(LS_KEY); applySettingsToForm({}); toast("Cleared","ok");
+  localStorage.removeItem(LS_KEY); applySettingsToForm({});
+  aiTriageOn=false; buildTabs(); renderTab(); updateArmCount();
+  toast("Cleared","ok");
 });
 
 /* test key buttons */
@@ -610,7 +781,6 @@ function toast(msg,kind){
 (function init(){
   const s=loadSettings();
   applyTheme(s.theme||"dark");
-  syncAiPill(!!s.ai_enabled);
   loadModules();
 })();
 </script>
