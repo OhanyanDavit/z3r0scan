@@ -30,10 +30,18 @@ def test_validate_target_accepts_normal():
 
 
 @pytest.mark.parametrize("bad", ["", "   ", "-oX", "-p-", "a\r\nb", "host\x00", "bad host",
-                                 "host:0", "host:99999", "host:abc"])
+                                 "host:0", "host:99999", "host:abc",
+                                 # not a resolvable domain shape (typos, no TLD, single label)
+                                 "htt", "https://htt", "notld", "example.", "example.c", "http://"])
 def test_validate_target_rejects_bad(bad):
     with pytest.raises(TargetError):
         validate_target(bad)
+
+
+@pytest.mark.parametrize("good", ["example.com", "picsart.io", "sub.example.co.uk",
+                                  "https://picsart.com", "8.8.8.8", "::1", "localhost:8080"])
+def test_validate_target_accepts_valid_domains_and_ips(good):
+    assert validate_target(good) == good.strip()
 
 
 def test_resolve_all_ip_literal_returns_itself():

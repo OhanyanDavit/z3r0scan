@@ -58,6 +58,39 @@ def is_ip(target: str) -> bool:
         return False
 
 
+# A single DNS label: 1-63 chars, alnum + hyphen, no leading/trailing hyphen.
+_HOST_LABEL = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$")
+# A plausible TLD: 2+ letters, or a punycode (IDN) label.
+_HOST_TLD = re.compile(r"^(?:[A-Za-z]{2,63}|xn--[A-Za-z0-9]{2,59})$")
+
+
+def is_valid_host(host: str) -> bool:
+    """True if ``host`` is a usable scan target: an IP, ``localhost``, or a
+    fully-qualified domain (at least one dot and a real-looking TLD).
+
+    This is what separates a genuine target like ``example.com`` from a typo
+    like ``htt`` — the latter has no dot and no TLD, so it can never resolve.
+    """
+    h = (host or "").strip().rstrip(".")  # tolerate a trailing-dot FQDN
+    if not h:
+        return False
+    # Bracketed IPv6 literal, e.g. "[::1]".
+    if h.startswith("[") and "]" in h:
+        h = h[1 : h.index("]")]
+    if is_ip(h):
+        return True
+    if h.lower() == "localhost":
+        return True
+    if len(h) > 253:
+        return False
+    labels = h.split(".")
+    if len(labels) < 2:
+        return False  # single-label host (e.g. "htt") — not a domain
+    if not all(_HOST_LABEL.match(label) for label in labels):
+        return False
+    return bool(_HOST_TLD.match(labels[-1]))
+
+
 def is_ipv6(target: str) -> bool:
     try:
         return isinstance(ipaddress.ip_address(target), ipaddress.IPv6Address)
@@ -129,6 +162,11 @@ def validate_target(target: str) -> str:
     host = normalize_host(t)
     if not host or host.startswith("-"):
         raise TargetError("invalid target host")
+    if not is_valid_host(host):
+        raise TargetError(
+            f"'{host}' is not a valid domain, IP, or host "
+            "(expected something like example.com or 1.2.3.4)"
+        )
 
     # Validate an explicit port when present (host:port, not bare IPv6/URL host).
     if "://" not in t and t.count(":") == 1 and not is_ipv6(t):

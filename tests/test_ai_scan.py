@@ -116,3 +116,42 @@ def test_registered_and_default():
     from z3r0scan.modules import REGISTRY
     assert REGISTRY.get("ai_scan") is AIScanModule
     assert "ai_scan" in Config().modules
+
+
+def test_extract_surface_finds_endpoints_forms_params():
+    m = AIScanModule(_cfg())
+    body = (
+        '<a href="/login">L</a><a href="/admin?id=5">A</a>'
+        '<script src="/static/app.js"></script>'
+        '<form action="/search"><input name=q></form>'
+        '<script>fetch("/api/user?token=abc");axios.get("/api/o?next=http://x")</script>'
+        '<a href="#top">t</a><a href="mailto:a@b.com">m</a>'
+    )
+    endpoints, forms, params = m._extract_surface(body)
+    assert "/login" in endpoints and "/admin?id=5" in endpoints
+    assert "/api/user?token=abc" in endpoints          # fetch()
+    assert "/api/o?next=http://x" in endpoints          # axios
+    assert "#top" not in endpoints and not any("mailto" in e for e in endpoints)
+    assert forms == 1
+    assert params == ["id", "next", "token"]            # sorted, deduped
+
+
+def test_cookie_flags_summarized():
+    m = AIScanModule(_cfg())
+    flags = m._cookie_flags({"Set-Cookie": "sid=abc; HttpOnly; Path=/, pref=1; Secure"})
+    assert flags == ["sid [HttpOnly no-SameSite]", "pref [Secure no-SameSite]"]
+
+
+def test_finding_carries_owasp_and_next_step(monkeypatch):
+    _stub_gather(monkeypatch)
+    _use_provider(monkeypatch, lambda s, u: (
+        '{"findings":[{"title":"Verbose stack trace","severity":"medium",'
+        '"confidence":"high","owasp":"A05","endpoint":"/api/user",'
+        '"description":"Stack trace leaked","next_step":"Send an invalid id"}]}', {}
+    ))
+    res = AIScanModule(_cfg(ai_provider="anthropic", anthropic_api_key="k")).run("example.com")
+    f = res.findings[0]
+    assert f.title.startswith("[A05]")
+    assert "Endpoint: /api/user" in f.description
+    assert "Next step: Send an invalid id" in f.description
+    assert f.evidence["owasp"] == "A05"

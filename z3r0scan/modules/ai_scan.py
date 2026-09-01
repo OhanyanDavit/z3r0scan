@@ -38,8 +38,19 @@ except ImportError:  # pragma: no cover
 # Keep the evidence bundle bounded so a huge page can't blow the token budget.
 MAX_BODY_SNIPPET = 4000
 MAX_HEADERS = 40
+MAX_ENDPOINTS = 40
 # Don't let a chatty model flood the report.
 MAX_FINDINGS = 40
+
+# Endpoint/asset discovery from an HTML/JS body (best-effort, non-executing).
+_ENDPOINT_RE = re.compile(
+    r"""(?:href|src|action)\s*=\s*["']([^"'<>]+)["']"""       # HTML attributes
+    r"""|(?:fetch|axios(?:\.\w+)?|open)\s*\(\s*["']([^"']+)["']"""  # JS calls
+    r"""|["'](/[A-Za-z0-9_./-]+(?:\?[^"']*)?)["']""",         # bare absolute paths
+    re.IGNORECASE,
+)
+_FORM_RE = re.compile(r"<form\b[^>]*>", re.IGNORECASE)
+_PARAM_RE = re.compile(r"[?&]([A-Za-z0-9_\[\]-]{1,40})=")
 
 _SEV_MAP = {
     "info": Severity.INFO,
@@ -56,26 +67,46 @@ _CONF_MAP = {
 }
 
 _SYSTEM_PROMPT = (
-    "You are an offensive-security analyst performing an AUTHORIZED, in-scope "
-    "assessment. You are given evidence collected from a single live web target "
-    "by a non-intrusive HTTP probe. Analyze ONLY that evidence and identify "
-    "concrete, security-relevant observations a human tester should act on.\n\n"
+    "You are a senior web-application penetration tester on an AUTHORIZED, "
+    "in-scope engagement. You are given evidence collected from a single live "
+    "web target by a non-intrusive HTTP probe: response headers, cookies, a body "
+    "snippet, discovered endpoints/links/forms/parameters, robots.txt and "
+    "security.txt. Perform a triage review as a human pentester would.\n\n"
+    "Work through the OWASP Top 10 (2021) and report concrete, evidence-backed "
+    "observations for whichever categories the evidence actually supports:\n"
+    "  A01 Broken Access Control (admin/internal paths, IDOR-prone id params, "
+    "CORS with credentials)\n"
+    "  A02 Cryptographic Failures (missing HSTS, cookies without Secure, mixed "
+    "content, sensitive data in the body)\n"
+    "  A03 Injection (parameters/forms that look reflected or DB/OS-backed — "
+    "candidates for SQLi/XSS/command injection)\n"
+    "  A04 Insecure Design  A05 Security Misconfiguration (verbose errors/stack "
+    "traces, default pages, debug endpoints, missing security headers, directory "
+    "listing)\n"
+    "  A06 Vulnerable & Outdated Components (server/framework/library versions "
+    "with a known CVE class)\n"
+    "  A07 Identification & Auth Failures (login/session endpoints, weak cookie "
+    "flags: HttpOnly/SameSite)\n"
+    "  A08 Software & Data Integrity  A09 Logging Failures  A10 SSRF "
+    "(URL/redirect/fetch parameters).\n\n"
     "Rules:\n"
     "- Ground every finding in the supplied evidence. Do NOT invent endpoints, "
-    "versions, or behavior that isn't shown. If the evidence is thin, return few "
-    "or no findings.\n"
-    "- Prefer specific, actionable observations (a leaked server version with a "
-    "known CVE class, a verbose error/stack trace, a permissive "
-    "Access-Control-Allow-Origin, an interesting path disallowed in robots.txt, "
-    "a missing/again weak security header in context) over generic advice.\n"
-    "- Set severity by real-world impact and confidence by how strongly the "
-    "evidence supports it. A raw observation is low/medium confidence.\n"
-    "- Do NOT suggest destructive or mass-exploitation actions.\n\n"
+    "versions, or behavior that isn't shown. If evidence is thin, return few or "
+    "no findings — never pad.\n"
+    "- For each finding: name the OWASP category, cite the exact evidence "
+    "(header value, cookie, endpoint, parameter), and give ONE concrete, "
+    "non-destructive next test a tester would run to confirm it.\n"
+    "- Set severity by real-world impact; set confidence by how strongly the "
+    "evidence supports it (a raw observation is low/medium).\n"
+    "- Do NOT provide working exploit payloads or instructions for destructive "
+    "or mass exploitation — describe the verification step at a high level.\n\n"
     "Respond with STRICT JSON only — no prose, no code fences — of the form:\n"
     '{"findings": [{"title": str, "severity": '
     '"info|low|medium|high|critical", "confidence": '
-    '"low|medium|high|verified", "description": str}]}\n'
-    "Return an empty list if there is nothing security-relevant."
+    '"low|medium|high|verified", "owasp": "A01..A10 or empty", '
+    '"endpoint": "relevant URL/param or empty", "description": str, '
+    '"next_step": "one concrete non-destructive check"}]}\n'
+    "Return an empty findings list if there is nothing security-relevant."
 )
 
 
@@ -156,11 +187,16 @@ class AIScanModule(ScanModule):
                 continue
             status, headers, body = page
             probed_url = url
+            endpoints, forms, params = self._extract_surface(body)
             evidence.update(
                 reachable=True,
                 url=url,
                 status=status,
                 headers=dict(list(headers.items())[:MAX_HEADERS]),
+                cookies=self._cookie_flags(headers),
+                endpoints=endpoints,
+                forms=forms,
+                params=params,
                 body_snippet=body[:MAX_BODY_SNIPPET],
             )
             base = url.rstrip("/")
@@ -172,6 +208,56 @@ class AIScanModule(ScanModule):
                 evidence["security_txt"] = sectxt[2][:1000]
             break
         return evidence, probed_url
+
+    def _extract_surface(self, body: str) -> tuple[list[str], int, list[str]]:
+        """Pull endpoints, form count, and query-parameter names from a body.
+
+        Best-effort and non-executing — just regex over the served HTML/JS so the
+        model has a concrete attack surface (links, form actions, fetch/XHR URLs,
+        parameters) to reason about rather than only the homepage text.
+        """
+        endpoints: list[str] = []
+        seen = set()
+        for match in _ENDPOINT_RE.finditer(body or ""):
+            raw = next((g for g in match.groups() if g), "")
+            raw = raw.strip()
+            # Skip noise: anchors, data/JS URIs, and asset files with no params.
+            if not raw or raw.startswith(("#", "data:", "javascript:", "mailto:", "tel:")):
+                continue
+            if raw not in seen:
+                seen.add(raw)
+                endpoints.append(raw[:200])
+            if len(endpoints) >= MAX_ENDPOINTS:
+                break
+        params = sorted({m.group(1) for m in _PARAM_RE.finditer(body or "")})[:MAX_ENDPOINTS]
+        forms = len(_FORM_RE.findall(body or ""))
+        return endpoints, forms, params
+
+    def _cookie_flags(self, headers: dict) -> list[str]:
+        """Summarize Set-Cookie flags (HttpOnly/Secure/SameSite) for A07/A02."""
+        raw = ""
+        for k, v in (headers or {}).items():
+            if k.lower() == "set-cookie":
+                raw = v
+                break
+        if not raw:
+            return []
+        out = []
+        for chunk in raw.split(","):
+            name = chunk.split("=", 1)[0].strip()
+            if not name or "=" not in chunk:
+                continue
+            low = chunk.lower()
+            flags = [f for f in ("httponly", "secure") if f in low]
+            samesite = "samesite" in low
+            out.append(
+                f"{name[:40]} [{'HttpOnly ' if 'httponly' in low else ''}"
+                f"{'Secure ' if 'secure' in low else ''}"
+                f"{'SameSite' if samesite else 'no-SameSite'}]".strip()
+            )
+            if len(out) >= 15:
+                break
+        return out
 
     def _fetch(self, url: str):
         """GET a URL. Returns (status, headers, text) or None."""
@@ -192,10 +278,22 @@ class AIScanModule(ScanModule):
             "",
             "## Response headers",
             json.dumps(evidence.get("headers", {}), indent=2),
-            "",
-            "## Body snippet (truncated)",
-            evidence.get("body_snippet", "") or "(empty)",
         ]
+        cookies = evidence.get("cookies") or []
+        if cookies:
+            lines += ["", "## Cookies (Set-Cookie flags)", "\n".join(f"- {c}" for c in cookies)]
+        endpoints = evidence.get("endpoints") or []
+        if endpoints:
+            lines += ["", f"## Discovered endpoints ({len(endpoints)})",
+                      "\n".join(f"- {e}" for e in endpoints)]
+        params = evidence.get("params") or []
+        if params:
+            lines += ["", "## Query parameters seen", ", ".join(params)]
+        forms = evidence.get("forms")
+        if forms:
+            lines += ["", f"## Forms on page: {forms}"]
+        lines += ["", "## Body snippet (truncated)",
+                  evidence.get("body_snippet", "") or "(empty)"]
         if "robots_txt" in evidence:
             lines += ["", "## robots.txt", evidence["robots_txt"]]
         if "security_txt" in evidence:
@@ -228,11 +326,22 @@ class AIScanModule(ScanModule):
     def _to_finding(self, item: dict, probed_url: str) -> Finding:
         sev = _SEV_MAP.get(str(item.get("severity", "info")).lower(), Severity.INFO)
         conf = _CONF_MAP.get(str(item.get("confidence", "low")).lower(), Confidence.LOW)
-        title = str(item.get("title") or "AI finding").strip()[:200]
+        owasp = str(item.get("owasp", "")).strip()
+        endpoint = str(item.get("endpoint", "")).strip()
+        next_step = str(item.get("next_step", "")).strip()
+        base_title = str(item.get("title") or "AI finding").strip()[:200]
+        title = f"[{owasp}] {base_title}" if owasp else base_title
+
+        desc = str(item.get("description", "")).strip()
+        if endpoint:
+            desc += f"\nEndpoint: {endpoint}"
+        if next_step:
+            desc += f"\nNext step: {next_step}"
         return Finding(
             title=title,
             severity=sev,
             confidence=conf,
-            description=str(item.get("description", "")).strip(),
-            evidence={"kind": "ai", "parsed": True, "url": probed_url},
+            description=desc.strip(),
+            evidence={"kind": "ai", "parsed": True, "url": probed_url,
+                      "owasp": owasp, "endpoint": endpoint, "next_step": next_step},
         )
