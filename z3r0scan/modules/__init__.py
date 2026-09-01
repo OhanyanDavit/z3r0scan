@@ -6,6 +6,7 @@ the order requested by the config.
 
 from __future__ import annotations
 
+from .ai_scan import AIScanModule
 from .base import ScanModule
 from .host_scan import HostScanModule
 from .shodan_enrich import ShodanModule
@@ -19,6 +20,7 @@ REGISTRY: dict[str, type[ScanModule]] = {
     WebProbeModule.name: WebProbeModule,
     VulnScanModule.name: VulnScanModule,
     ShodanModule.name: ShodanModule,
+    AIScanModule.name: AIScanModule,
 }
 
 __all__ = ["REGISTRY", "ScanModule"]

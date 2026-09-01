@@ -38,7 +38,9 @@ class Config:
     threads: int = 50
     # Which modules to run, in order.
     modules: list[str] = field(
-        default_factory=lambda: ["host_scan", "subdomains", "web_probe", "vuln_scan", "shodan"]
+        default_factory=lambda: [
+            "host_scan", "subdomains", "web_probe", "vuln_scan", "shodan", "ai_scan"
+        ]
     )
     # API tokens for enrichment modules.
     shodan_api_key: str | None = None

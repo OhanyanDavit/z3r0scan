@@ -135,7 +135,15 @@ def start_scan(req: ScanRequest) -> dict[str, str]:
     except TargetError as exc:
         raise HTTPException(400, f"invalid target: {exc}") from exc
 
-    modules = [m for m in (req.modules or list(REGISTRY)) if m in REGISTRY]
+    # Distinguish "field omitted" (None -> run everything, the API/CLI default)
+    # from "explicitly empty" ([] -> the user deselected every module). An empty
+    # list must NOT silently fall back to the full registry.
+    if req.modules is None:
+        modules = list(REGISTRY)
+    else:
+        modules = [m for m in req.modules if m in REGISTRY]
+        if not modules:
+            raise HTTPException(400, "select at least one module to scan")
     job_id = uuid.uuid4().hex[:12]
     with _LOCK:
         _reap_old_jobs()

@@ -511,9 +511,17 @@ document.getElementById("scanForm").addEventListener("submit",async e=>{
   document.getElementById("aiPanel").style.display="none";
   document.getElementById("otherPanels").innerHTML="";
   const aiOn = document.getElementById("aiToggle").classList.contains("on");
+  const mods = selectedModules();
+  if(!mods.length){
+    document.getElementById("status").textContent = aiOn
+      ? "⚠ AI analysis triages scan results — also enable at least one scan module (host, subdomains, web, vuln…)"
+      : "⚠ select at least one module to scan";
+    btn.disabled=false; btn.textContent="Scan";
+    return;
+  }
   const body={
     target,
-    modules:selectedModules(),
+    modules:mods,
     shodan_api_key: s.shodan_key || null,
     ai:{
       enabled: aiOn,

@@ -44,3 +44,16 @@ def test_dashboard_rejects_invalid_target():
     client = TestClient(app)
     resp = client.post("/api/scan", json={"target": "-oX"})
     assert resp.status_code == 400
+
+
+def test_dashboard_rejects_empty_module_selection():
+    """Deselecting every module must NOT silently run the full registry."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from z3r0scan.web.app import app
+
+    client = TestClient(app)
+    resp = client.post("/api/scan", json={"target": "example.com", "modules": []})
+    assert resp.status_code == 400
+    assert "at least one module" in resp.json()["detail"]
