@@ -35,6 +35,24 @@ def test_dashboard_job_exists_before_worker_starts():
     assert status.json()["target"] == "example.com"
 
 
+def test_dashboard_stop_endpoint():
+    """Stopping a job sets its cancel flag; unknown jobs 404."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from z3r0scan.web.app import app
+
+    client = TestClient(app)
+    resp = client.post("/api/scan", json={"target": "example.com", "modules": ["shodan"]})
+    job_id = resp.json()["job_id"]
+    stopped = client.post(f"/api/scan/{job_id}/stop")
+    assert stopped.status_code == 200
+    assert stopped.json()["cancelled"] is True
+    # status keeps reporting the cancelled flag
+    assert client.get(f"/api/scan/{job_id}").json()["cancelled"] is True
+    assert client.post("/api/scan/does-not-exist/stop").status_code == 404
+
+
 def test_dashboard_rejects_invalid_target():
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient

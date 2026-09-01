@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
+import threading
+import time
 from urllib.parse import urlparse
 
 
@@ -15,27 +19,108 @@ def have_tool(name: str) -> bool:
     return shutil.which(name) is not None
 
 
-def run(cmd: list[str], timeout: float = 120.0, input_text: str | None = None) -> tuple[int, str, str]:
+def _terminate(proc: subprocess.Popen) -> None:
+    """Kill a process and its whole group (started with start_new_session)."""
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.kill()
+        except OSError:
+            return
+    try:
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def run(
+    cmd: list[str],
+    timeout: float = 120.0,
+    input_text: str | None = None,
+    cancel_event: "threading.Event | None" = None,
+) -> tuple[int, str, str]:
     """Run a command, capturing output. Never raises on non-zero exit.
 
     Optionally feeds ``input_text`` to the process's stdin. Returns
-    (returncode, stdout, stderr). A missing binary or timeout is reported as
-    returncode -1 with the reason in stderr.
+    (returncode, stdout, stderr). A missing binary, timeout, or cancellation is
+    reported as returncode -1 with the reason in stderr.
+
+    When ``cancel_event`` is provided and gets set mid-run, the process (and its
+    child group) is terminated promptly so a long scan can be interrupted; any
+    output captured so far is still returned. The process is launched in its own
+    session so tools that fork children (nmap, nuclei) are killed as a group.
     """
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            input=input_text,
-            capture_output=True,
+            stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
-            check=False,
+            start_new_session=True,
         )
-        return proc.returncode, proc.stdout, proc.stderr
     except FileNotFoundError:
         return -1, "", f"binary not found: {cmd[0]}"
-    except subprocess.TimeoutExpired:
-        return -1, "", f"timed out after {timeout}s"
+
+    # Drain pipes in background threads so a chatty process can't deadlock on a
+    # full pipe buffer while we poll for completion/cancellation.
+    out_chunks: list[str] = []
+    err_chunks: list[str] = []
+
+    def _drain(pipe, sink):
+        try:
+            for line in iter(pipe.readline, ""):
+                sink.append(line)
+        except (ValueError, OSError):
+            pass
+        finally:
+            try:
+                pipe.close()
+            except OSError:
+                pass
+
+    t_out = threading.Thread(target=_drain, args=(proc.stdout, out_chunks), daemon=True)
+    t_err = threading.Thread(target=_drain, args=(proc.stderr, err_chunks), daemon=True)
+    t_out.start()
+    t_err.start()
+
+    if input_text is not None and proc.stdin is not None:
+        try:
+            proc.stdin.write(input_text)
+        except (BrokenPipeError, OSError):
+            pass
+        finally:
+            try:
+                proc.stdin.close()
+            except OSError:
+                pass
+
+    start = time.monotonic()
+    reason = ""
+    while True:
+        if proc.poll() is not None:
+            break
+        if cancel_event is not None and cancel_event.is_set():
+            _terminate(proc)
+            reason = "cancelled"
+            break
+        if time.monotonic() - start > timeout:
+            _terminate(proc)
+            reason = f"timed out after {timeout}s"
+            break
+        time.sleep(0.2)
+
+    t_out.join(timeout=2)
+    t_err.join(timeout=2)
+    out = "".join(out_chunks)
+    err = "".join(err_chunks)
+    if reason:
+        return -1, out, err or reason
+    return proc.returncode, out, err
 
 
 def normalize_host(target: str) -> str:

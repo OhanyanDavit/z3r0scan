@@ -75,6 +75,7 @@ def _serialize(job: dict[str, Any]) -> dict[str, Any]:
     d["current_module"] = job["current"]
     d["done"] = job["done"]
     d["error"] = job["error"]
+    d["cancelled"] = job["cancel"].is_set()
     return d
 
 
@@ -116,6 +117,7 @@ def _run_scan(job_id: str, target: str, modules: list[str], req: ScanRequest) ->
             anthropic_api_key=ai.anthropic_api_key or None,
             openai_api_key=ai.openai_api_key or None,
         )
+        config.cancel_event = job["cancel"]   # lets /stop interrupt this run
         final = Orchestrator(config).scan(target, on_progress=on_progress)
         with _LOCK:
             job["report"] = final
@@ -156,6 +158,7 @@ def start_scan(req: ScanRequest) -> dict[str, str]:
             "current": None,
             "done": False,
             "error": None,
+            "cancel": threading.Event(),
             "created_at": time.monotonic(),
         }
     _EXECUTOR.submit(_run_scan, job_id, target, modules, req)
@@ -168,6 +171,22 @@ def scan_status(job_id: str) -> dict[str, Any]:
         job = _JOBS.get(job_id)
         if not job:
             raise HTTPException(404, "unknown job")
+        return _serialize(job)
+
+
+@app.post("/api/scan/{job_id}/stop")
+def stop_scan(job_id: str) -> dict[str, Any]:
+    """Request cooperative cancellation of a running scan.
+
+    Sets the job's cancel event; the orchestrator stops launching modules and
+    utils.run terminates any in-flight subprocess (nmap/nuclei/…). Whatever was
+    found before the stop is preserved in the job's report.
+    """
+    with _LOCK:
+        job = _JOBS.get(job_id)
+        if not job:
+            raise HTTPException(404, "unknown job")
+        job["cancel"].set()
         return _serialize(job)
 
 

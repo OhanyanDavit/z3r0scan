@@ -26,6 +26,15 @@ class ScanModule(ABC):
     def __init__(self, config: Config):
         self.config = config
 
+    def _cancelled(self) -> bool:
+        """True once the run has been asked to stop (web dashboard Stop button).
+
+        Pure-Python modules that loop over many requests should check this so a
+        stop takes effect promptly instead of only between modules.
+        """
+        ev = getattr(self.config, "cancel_event", None)
+        return bool(ev is not None and ev.is_set())
+
     @abstractmethod
     def run(self, target: str) -> ModuleResult:
         """Execute the scan against ``target`` and return a result."""

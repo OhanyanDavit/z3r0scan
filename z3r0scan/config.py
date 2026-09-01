@@ -52,6 +52,10 @@ class Config:
     openai_api_key: str | None = None
     # Safety: require explicit acknowledgement before active scanning.
     authorized: bool = False
+    # Cooperative cancellation: a threading.Event the UI can set to stop a run.
+    # Not loaded from YAML/env/CLI — the web layer attaches it per job. Excluded
+    # from field-based construction so it never leaks into serialization.
+    cancel_event: Any = field(default=None, compare=False, repr=False)
 
     @classmethod
     def load(cls, config_path: str | os.PathLike | None = None, **overrides: Any) -> Config:

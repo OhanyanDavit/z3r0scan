@@ -23,10 +23,18 @@ class Orchestrator:
     def __init__(self, config: Config):
         self.config = config
 
+    def _cancelled(self) -> bool:
+        ev = getattr(self.config, "cancel_event", None)
+        return bool(ev is not None and ev.is_set())
+
     def scan(self, target: str, on_progress: ProgressCallback | None = None) -> ScanReport:
         report = ScanReport(target=target, started_at=time.time())
 
         for module_name in self.config.modules:
+            # Stop launching further modules once the run is cancelled. A module
+            # already in flight is interrupted via its subprocess (see utils.run).
+            if self._cancelled():
+                break
             module_cls = REGISTRY.get(module_name)
             if module_cls is None:
                 continue
@@ -46,8 +54,8 @@ class Orchestrator:
             if on_progress:
                 on_progress(module_name, result)  # signal "done"
 
-        # Optional AI triage of everything the modules produced.
-        if self.config.ai_enabled:
+        # Optional AI triage of everything the modules produced (skip if stopped).
+        if self.config.ai_enabled and not self._cancelled():
             if on_progress:
                 on_progress("ai_analysis", None)
             from .ai import run_ai_analysis  # local import: AI layer is optional

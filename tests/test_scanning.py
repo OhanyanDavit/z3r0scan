@@ -67,7 +67,7 @@ def test_nmap_parsing_marks_guesses_unconfirmed(monkeypatch):
         "2375/tcp open docker?",              # guessed
         "3306/tcp open tcpwrapped",          # proxy artifact
     ])
-    monkeypatch.setattr(hs, "run", lambda cmd, timeout=300: (0, fake_output, ""))
+    monkeypatch.setattr(hs, "run", lambda cmd, timeout=300, **kw: (0, fake_output, ""))
     result = HostScanModule(Config(ports=[22, 2375, 3306])).run("example.com")
     by_port = {f.evidence["port"]: f for f in result.findings if "port" in f.evidence}
     assert by_port[22].evidence["confirmed"] is True
@@ -82,7 +82,7 @@ def test_cdn_detection_adds_banner_and_downgrades(monkeypatch):
     )
     monkeypatch.setattr(hs, "have_tool", lambda name: True)
     monkeypatch.setattr(hs, "resolve", lambda host: "104.16.0.1")
-    monkeypatch.setattr(hs, "run", lambda cmd, timeout=300: (0, "6379/tcp open redis", ""))
+    monkeypatch.setattr(hs, "run", lambda cmd, timeout=300, **kw: (0, "6379/tcp open redis", ""))
     result = HostScanModule(Config(ports=[6379])).run("picsart.com")
     assert any(f.evidence.get("cdn") == "Cloudflare" for f in result.findings)
     redis = next(f for f in result.findings if f.evidence.get("port") == 6379)
@@ -131,3 +131,20 @@ def test_reporters_render(monkeypatch):
     assert "z3r0scan report" in to_markdown(report)
     html = to_html(report)
     assert "<html" in html.lower() and "example.com" in html
+
+
+def test_vuln_scan_notes_cdn_when_nuclei_empty(monkeypatch):
+    """An empty nuclei run behind a CDN should say so, not look clean."""
+    from z3r0scan.cdn import CDNResult
+    from z3r0scan.config import Config
+    from z3r0scan.modules import vuln_scan as vs
+
+    monkeypatch.setattr(vs, "have_tool", lambda name: True)
+    monkeypatch.setattr(vs, "run", lambda cmd, timeout=900, **kw: (0, "", ""))
+    monkeypatch.setattr(vs, "detect_cdn",
+                        lambda host: CDNResult(True, provider="Cloudflare", method="ip-range", ip="1.1.1.1"))
+
+    res = vs.VulnScanModule(Config()).run("example.com")
+    assert res.status == "ok"
+    assert "Cloudflare" in res.detail
+    assert any("CDN" in f.title or "CDN" in f.description for f in res.findings)

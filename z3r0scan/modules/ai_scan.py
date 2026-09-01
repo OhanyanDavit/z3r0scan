@@ -128,6 +128,8 @@ class AIScanModule(ScanModule):
             return self._finish(result, "skipped", "requests not installed — cannot gather evidence")
 
         evidence, probed_url = self._gather(target)
+        if self._cancelled():
+            return self._finish(result, "ok", "stopped before analysis")
         if not evidence.get("reachable"):
             return self._finish(
                 result, "ok",

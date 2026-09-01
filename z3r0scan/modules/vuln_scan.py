@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import json
 
+from ..cdn import detect_cdn
 from ..models import Finding, ModuleResult, Severity
-from ..utils import have_tool, run
+from ..utils import have_tool, normalize_host, run
 from .base import ScanModule
 from .web_probe import candidate_urls
 
@@ -65,7 +66,7 @@ class VulnScanModule(ScanModule):
             "-H", f"User-Agent: {BROWSER_UA}",
         ]
         # Give nuclei plenty of time; a broad template run is slow.
-        code, out, err = run(cmd, timeout=900)
+        code, out, err = run(cmd, timeout=900, cancel_event=self.config.cancel_event)
         # -1 is our sentinel for "could not run / timed out"; any other nonzero
         # exit with no parseable output is also a failure, not a clean result.
         if code != 0 and not out.strip():
@@ -99,6 +100,27 @@ class VulnScanModule(ScanModule):
         if not result.findings:
             # No findings is NOT proof the target is clean — nuclei may have been
             # blocked, rate-limited, or served a challenge. State only what we know.
-            return self._finish(result, "ok", f"no findings returned by nuclei for {url}")
+            # A CDN/WAF in front of the target is the most common reason a template
+            # run comes back empty, so call it out explicitly when detected.
+            detail = f"no findings returned by nuclei for {url}"
+            cdn = detect_cdn(normalize_host(target))
+            if cdn.detected:
+                note = (
+                    f"target is behind {cdn.provider} (via {cdn.method}) — nuclei is "
+                    "hitting the CDN/WAF edge, which blocks most templates; an empty "
+                    "result here does not mean the origin is clean. Test the origin "
+                    "directly if you can reach it."
+                )
+                detail += f" · {note}"
+                result.add(
+                    Finding(
+                        title="nuclei blind behind CDN/WAF",
+                        severity=Severity.INFO,
+                        description=note,
+                        evidence={"kind": "vuln", "cdn": cdn.provider, "method": cdn.method},
+                    )
+                )
+                return self._finish(result, "ok", detail)
+            return self._finish(result, "ok", detail)
         summary = ", ".join(f"{k}:{v}" for k, v in counts.items())
         return self._finish(result, "ok", f"{len(result.findings)} nuclei findings ({summary})")

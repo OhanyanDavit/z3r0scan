@@ -95,6 +95,7 @@ class HostScanModule(ScanModule):
         code, out, _err = run(
             ["nmap", "-Pn", "-sV", "--open", "-p", ports, "-T4", host],
             timeout=300,
+            cancel_event=self.config.cancel_event,
         )
         if code != 0 and not out:
             self._python_scan(host, result)

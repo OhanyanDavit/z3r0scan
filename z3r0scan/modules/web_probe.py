@@ -150,6 +150,7 @@ class WebProbeModule(ScanModule):
             ["httpx", "-silent", "-json", "-title", "-status-code", "-tech-detect",
              "-follow-redirects", "-H", f"User-Agent: {BROWSER_UA}", "-u", target],
             timeout=120,
+            cancel_event=self.config.cancel_event,
         )
         if code != 0:
             return None
@@ -349,6 +350,8 @@ class WebProbeModule(ScanModule):
         baseline_body = baseline[1] if baseline else ""
 
         for path, (sev, note) in SENSITIVE_PATHS.items():
+            if self._cancelled():
+                break
             fetched = self._fetch(base + path)
             if not fetched:
                 continue

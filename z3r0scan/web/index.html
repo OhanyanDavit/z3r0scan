@@ -101,6 +101,9 @@
   }
   .btn:hover{filter:brightness(1.08)} .btn:disabled{opacity:.55;cursor:not-allowed;filter:grayscale(.3)}
   .btn.ghost{background:var(--panel2);color:var(--fg);border:1px solid var(--border2);box-shadow:none}
+  .btn.danger{background:color-mix(in srgb,var(--crit) 16%,var(--panel2));color:var(--crit);
+    border:1px solid color-mix(in srgb,var(--crit) 55%,transparent);box-shadow:none}
+  .btn.danger:hover{background:color-mix(in srgb,var(--crit) 26%,var(--panel2));filter:none}
   .btn.sm{padding:.5rem .9rem;font-size:.8rem}
 
   /* ---------- scanner console (tabs) ---------- */
@@ -275,6 +278,7 @@
         <input type="text" id="target" placeholder="target — scanme.nmap.org · 1.2.3.4 · http://host:8080" autocomplete="off" autofocus>
       </div>
       <button type="submit" class="btn" id="scanBtn">Run scan</button>
+      <button type="button" class="btn danger" id="stopBtn" style="display:none">■ Stop</button>
     </form>
 
     <!-- scanner console with per-module tabs -->
@@ -394,7 +398,22 @@
 <script>
 const SEV_ORDER = ["critical","high","medium","low","info"];
 const LS_KEY = "z3r0scan.settings";
+const JOB_KEY = "z3r0scan.activejob";   // {job_id, target} — survives reloads
 let poll = null;
+let currentJobId = null;
+
+function saveJob(job_id, target){ localStorage.setItem(JOB_KEY, JSON.stringify({job_id, target})); }
+function loadJob(){ try{ return JSON.parse(localStorage.getItem(JOB_KEY)); }catch{ return null; } }
+function clearJob(){ localStorage.removeItem(JOB_KEY); }
+
+/* show/hide the Stop button + swap the Run button while a scan is live */
+function setRunning(running){
+  const scanBtn=document.getElementById("scanBtn");
+  const stopBtn=document.getElementById("stopBtn");
+  scanBtn.disabled=running; scanBtn.textContent=running?"Scanning…":"Run scan";
+  stopBtn.style.display=running?"":"none";
+  stopBtn.disabled=false; stopBtn.textContent="■ Stop";
+}
 
 // Presentation metadata per module (backend stays the source of truth for names).
 const MODULE_META = {
@@ -603,10 +622,13 @@ function render(data){
 
   const st=document.getElementById("status");
   if(!data.done){
+    const stopping = data.cancelled ? " · stopping…" : "";
     const cur = data.current_module ? ` — ${esc(data.current_module)}${data.current_module==="ai_analysis"?" (thinking…)":""}` : "";
-    st.innerHTML = `<span class="prompt">▸</span><span class="spinner"></span> scanning${cur} · ${data.duration}s`;
+    st.innerHTML = `<span class="prompt">▸</span><span class="spinner"></span> scanning${cur}${stopping} · ${data.duration}s`;
   }else if(data.error){
     st.innerHTML = `<span class="prompt">▸</span> ⚠ scan failed: ${esc(data.error)}`;
+  }else if(data.cancelled){
+    st.innerHTML = `<span class="prompt">▸</span> <span style="color:var(--crit);font-weight:700">■ stopped by user in ${data.duration}s</span> · partial results below · top severity: <b>${(data.top_severity||"none").toUpperCase()}</b>`;
   }else{
     st.innerHTML = `<span class="prompt">▸</span> <span class="badge-done">✔ done in ${data.duration}s</span> · top severity: <b>${(data.top_severity||"none").toUpperCase()}</b>`;
   }
@@ -669,20 +691,33 @@ function render(data){
 
 function stopPolling(){
   if(poll){ clearInterval(poll); poll=null; }
-  const b=document.getElementById("scanBtn"); b.disabled=false; b.textContent="Run scan";
+  setRunning(false);
+}
+
+function startPolling(jobId){
+  currentJobId = jobId;
+  setRunning(true);
+  if(poll) clearInterval(poll);
+  poll = setInterval(()=>tick(jobId), 1000);
+  tick(jobId);
 }
 
 async function tick(jobId){
   try{
     const res = await fetch(`/api/scan/${jobId}`);
     if(!res.ok){
-      document.getElementById("status").innerHTML = `<span class="prompt">▸</span> ⚠ status ${res.status}: ${esc(res.statusText)}`;
-      if(res.status === 404) stopPolling();
+      if(res.status === 404){
+        // Job expired or the server restarted — stop cleanly, drop the stale id.
+        stopPolling(); clearJob();
+        document.getElementById("status").innerHTML = `<span class="prompt">▸</span> previous scan is no longer available`;
+      }else{
+        document.getElementById("status").innerHTML = `<span class="prompt">▸</span> ⚠ status ${res.status}: ${esc(res.statusText)}`;
+      }
       return;
     }
     const data = await res.json();
     render(data);
-    if(data.done) stopPolling();
+    if(data.done){ stopPolling(); }   // keep JOB_KEY so a reload still shows results
   }catch(e){
     document.getElementById("status").innerHTML = `<span class="prompt">▸</span> ⚠ lost connection to the dashboard`;
   }
@@ -700,7 +735,6 @@ document.getElementById("scanForm").addEventListener("submit",async e=>{
     return;
   }
   const s=loadSettings();
-  const btn=document.getElementById("scanBtn");
   const setStatus=(html)=>document.getElementById("status").innerHTML=`<span class="prompt">▸</span> ${html}`;
   document.getElementById("cdnBanner").style.display="none";
   document.getElementById("aiPanel").style.display="none";
@@ -713,7 +747,7 @@ document.getElementById("scanForm").addEventListener("submit",async e=>{
       : "⚠ arm at least one scan module");
     return;
   }
-  btn.disabled=true; btn.textContent="Scanning…";
+  setRunning(true);
   const body={
     target,
     modules:mods,
@@ -732,17 +766,28 @@ document.getElementById("scanForm").addEventListener("submit",async e=>{
     if(!res.ok){
       const err = await res.json().catch(()=>({detail:res.statusText}));
       setStatus(`⚠ ${esc(err.detail || "could not start scan")}`);
-      btn.disabled=false; btn.textContent="Run scan";
+      setRunning(false);
       return;
     }
     const {job_id} = await res.json();
-    if(poll) clearInterval(poll);
-    poll = setInterval(()=>tick(job_id), 1000);
-    tick(job_id);
+    saveJob(job_id, target);          // persist so a reload can resume this scan
+    startPolling(job_id);
   }catch(e){
     setStatus("⚠ could not reach the dashboard");
-    btn.disabled=false; btn.textContent="Run scan";
+    setRunning(false);
   }
+});
+
+/* ---------- stop scan ---------- */
+document.getElementById("stopBtn").addEventListener("click",async ()=>{
+  if(!currentJobId) return;
+  const stopBtn=document.getElementById("stopBtn");
+  stopBtn.disabled=true; stopBtn.textContent="stopping…";
+  try{
+    const res=await fetch(`/api/scan/${currentJobId}/stop`,{method:"POST"});
+    if(res.ok){ toast("stopping scan — finishing up","ok"); tick(currentJobId); }
+    else{ toast("could not stop scan","err"); stopBtn.disabled=false; stopBtn.textContent="■ Stop"; }
+  }catch(e){ toast("could not reach the dashboard","err"); stopBtn.disabled=false; stopBtn.textContent="■ Stop"; }
 });
 
 /* arm all / none quick actions */
@@ -809,11 +854,27 @@ function toast(msg,kind){
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.className="toast",2600);
 }
 
+/* ---------- resume a scan after a page reload ---------- */
+async function resumeActiveJob(){
+  const saved=loadJob();
+  if(!saved || !saved.job_id) return;
+  try{
+    const res=await fetch(`/api/scan/${saved.job_id}`);
+    if(!res.ok){ clearJob(); return; }              // expired / server restarted
+    if(saved.target) document.getElementById("target").value=saved.target;
+    const data=await res.json();
+    render(data);                                    // data is back on the page
+    if(!data.done){ startPolling(saved.job_id); }    // still running → keep polling
+    else{ currentJobId=saved.job_id; }
+  }catch(e){ /* offline; leave the saved id for the next load */ }
+}
+
 /* ---------- init ---------- */
 (function init(){
   const s=loadSettings();
   applyTheme(s.theme||"dark");
   loadModules();
+  resumeActiveJob();
 })();
 </script>
 </body>

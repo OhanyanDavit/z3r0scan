@@ -97,7 +97,8 @@ class SubdomainModule(ScanModule):
         return name == host or name.endswith("." + host)
 
     def _subfinder(self, host: str) -> set[str]:
-        code, out, _ = run(["subfinder", "-silent", "-all", "-d", host], timeout=300)
+        code, out, _ = run(["subfinder", "-silent", "-all", "-d", host], timeout=300,
+                           cancel_event=self.config.cancel_event)
         if code != 0 and not out:
             return set()
         names = (ln.strip().lower() for ln in out.splitlines() if ln.strip())
@@ -135,6 +136,7 @@ class SubdomainModule(ScanModule):
             ["dnsx", "-silent", "-a", "-json"],
             timeout=300,
             input_text="\n".join(sorted(candidates)),
+            cancel_event=self.config.cancel_event,
         )
         resolved: dict[str, list[str]] = {}
         if code != 0 and not out:

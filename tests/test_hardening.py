@@ -80,7 +80,7 @@ def test_wrong_banner_keeps_notable_port_informational():
 def test_nuclei_preserves_explicit_scheme_and_port(monkeypatch):
     captured = {}
 
-    def fake_run(cmd, timeout=900):
+    def fake_run(cmd, timeout=900, **kw):
         captured["cmd"] = cmd
         return 0, "", ""
 
@@ -93,7 +93,7 @@ def test_nuclei_preserves_explicit_scheme_and_port(monkeypatch):
 
 def test_nuclei_nonzero_exit_is_not_clean(monkeypatch):
     monkeypatch.setattr(vs, "have_tool", lambda name: True)
-    monkeypatch.setattr(vs, "run", lambda cmd, timeout=900: (1, "", "boom"))
+    monkeypatch.setattr(vs, "run", lambda cmd, timeout=900, **kw: (1, "", "boom"))
     result = vs.VulnScanModule(Config()).run("http://localhost:8080")
     assert result.status == "error"
     assert "clean" not in result.detail.lower()
@@ -229,3 +229,34 @@ def test_cli_stdout_is_valid_json():
     )
     parsed = json.loads(proc.stdout)  # raises if banner/progress leaked to stdout
     assert parsed["target"] == "example.com"
+
+
+# ---------------------------------------------------------------- cancellation
+def test_run_cancellation_terminates_promptly():
+    import threading
+    import time
+
+    from z3r0scan.utils import run
+
+    ev = threading.Event()
+    threading.Timer(0.3, ev.set).start()
+    t0 = time.monotonic()
+    code, _out, err = run(["sleep", "20"], timeout=30, cancel_event=ev)
+    dt = time.monotonic() - t0
+    assert code == -1
+    assert "cancelled" in err
+    assert dt < 5, f"cancel took too long: {dt:.1f}s"
+
+
+def test_orchestrator_stops_when_cancelled():
+    import threading
+
+    from z3r0scan.config import Config
+    from z3r0scan.orchestrator import Orchestrator
+
+    cfg = Config.load(config_path="/nonexistent.yml",
+                      modules=["host_scan", "web_probe"], authorized=True)
+    cfg.cancel_event = threading.Event()
+    cfg.cancel_event.set()               # cancelled before the loop starts
+    report = Orchestrator(cfg).scan("example.com")
+    assert report.modules == []          # no module was launched
