@@ -41,7 +41,7 @@ def run(
     cmd: list[str],
     timeout: float = 120.0,
     input_text: str | None = None,
-    cancel_event: "threading.Event | None" = None,
+    cancel_event: threading.Event | None = None,
 ) -> tuple[int, str, str]:
     """Run a command, capturing output. Never raises on non-zero exit.
 

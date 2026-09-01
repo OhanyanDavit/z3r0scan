@@ -250,7 +250,6 @@ class AIScanModule(ScanModule):
             if not name or "=" not in chunk:
                 continue
             low = chunk.lower()
-            flags = [f for f in ("httponly", "secure") if f in low]
             samesite = "samesite" in low
             out.append(
                 f"{name[:40]} [{'HttpOnly ' if 'httponly' in low else ''}"
